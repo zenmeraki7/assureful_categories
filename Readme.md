@@ -418,4 +418,5 @@ MIT License
 
 - Sentence Transformers
 - FAISS
-- PyTorch
+- PyTorch#   a s s u r e f u l _ c a t e g o r i e s  
+ 
