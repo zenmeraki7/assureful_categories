@@ -107,11 +107,11 @@ class TextEnhancer:
     @staticmethod
     def enhance_product_text(title: str, description: str = '',
                             tags: str = '', product_type: str = '',
-                            vendor: str = '') -> str:
+                            vendor: str = '') -> str:   
         '''
         Enhance product text for better matching
         
-        PRIORITY: Product Type >> Tags >> Brands
+        PRIORITY: Product Type >> Tags >> Brands   
         '''
         
         combined = f'{title} {description} {product_type} {vendor}'
