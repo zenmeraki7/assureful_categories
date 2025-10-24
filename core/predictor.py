@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from strategies.direct import DirectStrategy
-from strategies.progressive import ProgressiveStrategy
+from strategies.progressive import ProgressiveStrategy 
 from strategies.ensemble import EnsembleStrategy
 
 class Predictor:
