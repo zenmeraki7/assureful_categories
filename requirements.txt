@@ -1,0 +1,27 @@
+# --- Core Web Framework ---
+fastapi
+uvicorn[standard]
+
+# --- Configuration & Data Validation ---
+pydantic
+pydantic-settings
+
+# --- ML / AI ---
+torch
+sentence-transformers
+scikit-learn  # For calibration (if you add it)
+
+# --- Vector Database (FAISS) ---
+# Use faiss-cpu for CPU-only servers (<1GB RAM goal)
+faiss-cpu
+
+# OR: Use faiss-gpu for CUDA-enabled servers (much faster)
+# faiss-gpu
+
+# --- Data Handling ---
+pandas
+numpy
+
+# --- Observability ---
+prometheus-client
+prometheus-fastapi-instrumentator
