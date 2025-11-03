@@ -3,11 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.log
 *.dll
 *.so
 *.dylib
-*.exe
 .env
 .DS_Store
 *.zip
