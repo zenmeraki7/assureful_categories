@@ -1,13 +1,10 @@
 ﻿venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
+*.pkl
+*.pt
 *.dll
-*.so
-*.dylib
-.env
-.DS_Store
+*.exe
 *.zip
 *.tar
 *.gz
