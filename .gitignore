@@ -1,33 +1,16 @@
-cat > .gitignore << 'EOF'
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
 .Python
-
-# Cache
-cache/
-*.npy
-
-# Models (will be downloaded)
-models/
-
-# Virtual Environment
 venv/
 env/
-ENV/
-
-# IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# OS
 .DS_Store
-Thumbs.db
-
-# Logs
+*.bin
+*.safetensors
 *.log
-EOF
+cache/*.faiss
+cache/*.npy
+!cache/metadata.pkl
+!cache/model_info.json
+!cache/cross_store_synonyms.pkl

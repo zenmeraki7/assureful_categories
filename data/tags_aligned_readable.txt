@@ -1,0 +1,500 @@
+
+================================================================================
+ID: 1
+Path: Books/Arts & Photography
+Tags: books, arts, photography
+
+================================================================================
+ID: 10
+Path: Books/Health, Fitness & Dieting
+Tags: books, health, fitness, dieting
+
+================================================================================
+ID: 1000
+Path: Books
+Tags: books
+
+================================================================================
+ID: 10001
+Path: Books/Literature & Fiction/History & Criticism/Books & Reading/General
+Tags: books, literature, fiction, history, criticism, reading, general
+
+================================================================================
+ID: 10003
+Path: Books/Literature & Fiction/History & Criticism/Books & Reading/History of Books
+Tags: books, literature, fiction, history, criticism, reading
+
+================================================================================
+ID: 10016
+Path: Books/Literature & Fiction/British & Irish
+Tags: books, literature, fiction, british, irish
+
+================================================================================
+ID: 1002
+Path: Books/Arts & Photography/Architecture/Criticism
+Tags: books, arts, photography, architecture, criticism
+
+================================================================================
+ID: 10020672011
+Path: Books/Business & Money/Finance/Crowdfunding
+Tags: books, business, money, finance, crowdfunding
+
+================================================================================
+ID: 10020673011
+Path: Books/Business & Money/Finance/Financial Engineering
+Tags: books, business, money, finance, financial, engineering, financial engineering
+
+================================================================================
+ID: 10020674011
+Path: Books/Business & Money/Finance/Financial Risk Management
+Tags: books, business, money, finance, financial, risk, management, financial risk, risk management
+
+================================================================================
+ID: 10020675011
+Path: Books/Business & Money/Finance/Wealth Management
+Tags: books, business, money, finance, wealth, management, wealth management
+
+================================================================================
+ID: 10020677011
+Path: Books/Business & Money/Finance/Corporate Finance/Private Equity
+Tags: books, business, money, finance, corporate, corporate finance, private, equity, private equity
+
+================================================================================
+ID: 10020678011
+Path: Books/Business & Money/Finance/Corporate Finance/Valuation
+Tags: books, business, money, finance, corporate, corporate finance, valuation
+
+================================================================================
+ID: 10020679011
+Path: Books/Business & Money/Finance/Corporate Finance/Venture Capital
+Tags: books, business, money, finance, corporate, corporate finance, venture, capital, venture capital
+
+================================================================================
+ID: 10020683011
+Path: Books/Business & Money/Human Resources
+Tags: books, business, money, human, resources, human resources
+
+================================================================================
+ID: 10020684011
+Path: Books/Business & Money/Human Resources/Conflict Resolution & Mediation
+Tags: books, business, money, human, resources, human resources, conflict, resolution, conflict resolution, mediation
+
+================================================================================
+ID: 10020685011
+Path: Books/Business & Money/Human Resources/Knowledge Capital
+Tags: books, business, money, human, resources, human resources, knowledge, capital, knowledge capital
+
+================================================================================
+ID: 10020691011
+Path: Books/Business & Money/Education & Reference/Statistics
+Tags: books, business, money, education, reference, statistics
+
+================================================================================
+ID: 10020695011
+Path: Books/Business & Money/Industries/Automotive
+Tags: books, business, money, industries, automotive
+
+================================================================================
+ID: 10020696011
+Path: Books/Business & Money/Industries/Financial Services
+Tags: books, business, money, industries, financial, services, financial services
+
+================================================================================
+ID: 10020697011
+Path: Books/Business & Money/Industries/Manufacturing
+Tags: books, business, money, industries, manufacturing
+
+================================================================================
+ID: 10020698011
+Path: Books/Business & Money/Industries/Media & Communications
+Tags: books, business, money, industries, media, communications
+
+================================================================================
+ID: 10020699011
+Path: Books/Business & Money/Industries/Museums
+Tags: books, business, money, industries, museums
+
+================================================================================
+ID: 10020700011
+Path: Books/Business & Money/Industries/Energy & Mining
+Tags: books, business, money, industries, energy, mining
+
+================================================================================
+ID: 10020701011
+Path: Books/Business & Money/Industries/Energy & Mining/Natural Resource Extraction
+Tags: books, business, money, industries, energy, mining, natural, resource, extraction, natural resource, resource extraction
+
+================================================================================
+ID: 10020702011
+Path: Books/Business & Money/Industries/Sports & Entertainment/Park & Recreation
+Tags: books, business, money, industries, sports, entertainment, park, recreation
+
+================================================================================
+ID: 10020703011
+Path: Books/Business & Money/Investing/Analysis & Strategy
+Tags: books, business, money, investing, analysis, strategy
+
+================================================================================
+ID: 10020707011
+Path: Books/Business & Money/Investing/Derivatives
+Tags: books, business, money, investing, derivatives
+
+================================================================================
+ID: 10020708011
+Path: Books/Business & Money/Investing/Portfolio Management
+Tags: books, business, money, investing, portfolio, management, portfolio management
+
+================================================================================
+ID: 10020709011
+Path: Books/Business & Money/Management & Leadership/Corporate Governance
+Tags: books, business, money, management, leadership, corporate, governance, corporate governance
+
+================================================================================
+ID: 10020710011
+Path: Books/Business & Money/Management & Leadership/Mentoring & Coaching
+Tags: books, business, money, management, leadership, mentoring, coaching
+
+================================================================================
+ID: 10020711011
+Path: Books/Business & Money/Management & Leadership/Quality Control & Management
+Tags: books, business, money, management, leadership, quality, control, quality control
+
+================================================================================
+ID: 10020712011
+Path: Books/Business & Money/Management & Leadership/Quality Control & Management/Six Sigma
+Tags: books, business, money, management, leadership, quality, control, quality control, six, sigma, six sigma
+
+================================================================================
+ID: 10020713011
+Path: Books/Business & Money/Management & Leadership/Quality Control & Management/Lean
+Tags: books, business, money, management, leadership, quality, control, quality control, lean
+
+================================================================================
+ID: 10020716011
+Path: Books/Business & Money/Skills/Decision Making
+Tags: books, business, money, skills, decision, making, decision making
+
+================================================================================
+ID: 10020718011
+Path: Books/Business & Money/Processes & Infrastructure/Facility Management
+Tags: books, business, money, processes, infrastructure, facility, management, facility management
+
+================================================================================
+ID: 10020719011
+Path: Books/Business & Money/Processes & Infrastructure/Government & Business
+Tags: books, business, money, processes, infrastructure, government
+
+================================================================================
+ID: 10020720011
+Path: Books/Business & Money/Processes & Infrastructure/Infrastructure
+Tags: books, business, money, processes, infrastructure
+
+================================================================================
+ID: 10020721011
+Path: Books/Business & Money/Processes & Infrastructure/Office Equipment & Supplies
+Tags: books, business, money, processes, infrastructure, office, equipment, office equipment, supplies
+
+================================================================================
+ID: 10020722011
+Path: Books/Business & Money/Processes & Infrastructure/Office Management
+Tags: books, business, money, processes, infrastructure, office, management, office management
+
+================================================================================
+ID: 10020723011
+Path: Books/Business & Money/Processes & Infrastructure/Research & Development
+Tags: books, business, money, processes, infrastructure, research, development
+
+================================================================================
+ID: 10020724011
+Path: Books/Business & Money/Processes & Infrastructure/Strategic Planning
+Tags: books, business, money, processes, infrastructure, strategic, planning, strategic planning
+
+================================================================================
+ID: 10020725011
+Path: Books/Business & Money/Processes & Infrastructure/Structural Adjustment
+Tags: books, business, money, processes, infrastructure, structural, adjustment, structural adjustment
+
+================================================================================
+ID: 10021498011
+Path: Kindle Store/Kindle eBooks/Nonfiction/Business & Investing/Business Life/Mentoring & Coaching
+Tags: kindle, store, kindle store, ebooks, kindle ebooks, nonfiction, business, investing, life, business life, mentoring, coaching
+
+================================================================================
+ID: 10021499011
+Path: Kindle Store/Kindle eBooks/Nonfiction/Business & Investing/Management & Leadership/Knowledge Capital
+Tags: kindle, store, kindle store, ebooks, kindle ebooks, nonfiction, business, investing, management, leadership, knowledge, capital, knowledge capital
+
+================================================================================
+ID: 10030796011
+Path: Automotive/Replacement Parts/Lighting & Electrical/Electrical/Fuses & Accessories
+Tags: automotive, replacement, parts, replacement parts, lighting, electrical, fuses, accessories
+
+================================================================================
+ID: 10032723011
+Path: Electronics/Computers & Accessories/Tablet Accessories/Bags, Cases & Sleeves/Bags
+Tags: electronics, computers, accessories, tablet, tablet accessories, bags, cases, sleeves
+
+================================================================================
+ID: 10037931011
+Path: Books/Arts & Photography/Music/Songbooks/Jazz
+Tags: books, arts, photography, music, songbooks, jazz
+
+================================================================================
+ID: 10044115011
+Path: Patio, Lawn & Garden/Outdoor Heating & Cooling/Fire Pits & Outdoor Fireplaces/Fire Tables
+Tags: patio, lawn, garden, outdoor, heating, outdoor heating, cooling, fire, pits, fire pits, fireplaces, outdoor fireplaces, tables, fire tables
+
+================================================================================
+ID: 10048700011
+Path: Electronics/Wearable Technology
+Tags: electronics, wearable, technology, wearable technology
+
+================================================================================
+ID: 10048701011
+Path: Electronics/Wearable Technology/Accessories
+Tags: electronics, wearable, technology, wearable technology, accessories
+
+================================================================================
+ID: 10048702011
+Path: Sports & Outdoors/Sports & Fitness/Exercise & Fitness/Fitness Technology/App-Enabled Fitness Trackers
+Tags: sports, outdoors, fitness, exercise, technology, fitness technology, trackers, app-enabled fitness, fitness trackers
+
+================================================================================
+ID: 10048703011
+Path: Sports & Outdoors/Sports & Fitness/Exercise & Fitness/Fitness Technology/App-Enabled Fitness Trackers/Accessories
+Tags: sports, outdoors, fitness, exercise, technology, fitness technology, trackers, app-enabled fitness, fitness trackers, accessories
+
+================================================================================
+ID: 10048704011
+Path: Health & Personal Care/Wellness & Relaxation/App-Enabled Activity Trackers
+Tags: health, personal, care, personal care, wellness, relaxation, activity, trackers, app-enabled activity, activity trackers
+
+================================================================================
+ID: 10048705011
+Path: Health & Personal Care/Wellness & Relaxation/App-Enabled Activity Trackers/Accessories
+Tags: health, personal, care, personal care, wellness, relaxation, activity, trackers, app-enabled activity, activity trackers, accessories
+
+================================================================================
+ID: 10048706011
+Path: Sports & Outdoors/Sports & Fitness/Exercise & Fitness/Fitness Technology/App-Enabled Fitness Trackers/Clips, Arm & Wristbands
+Tags: sports, outdoors, fitness, exercise, technology, fitness technology, trackers, app-enabled fitness, fitness trackers, clips, arm, wristbands
+
+================================================================================
+ID: 10048708011
+Path: Electronics/Wearable Technology/Glasses
+Tags: electronics, wearable, technology, wearable technology, glasses
+
+================================================================================
+ID: 10048711011
+Path: Electronics/Wearable Technology/Rings
+Tags: electronics, wearable, technology, wearable technology, rings
+
+================================================================================
+ID: 10048712011
+Path: Sports & Outdoors/Sports & Fitness/Exercise & Fitness/Fitness Technology/App-Enabled Fitness Trackers/Accessories/Arm & Wristband Accessories
+Tags: sports, outdoors, fitness, exercise, technology, fitness technology, trackers, app-enabled fitness, fitness trackers, accessories, arm, wristband, wristband accessories
+
+================================================================================
+ID: 10048713011
+Path: Health & Personal Care/Wellness & Relaxation/App-Enabled Activity Trackers/Accessories/Smart Clip Accessories
+Tags: health, personal, care, personal care, wellness, relaxation, activity, trackers, app-enabled activity, activity trackers, accessories, smart, clip, smart clip, clip accessories
+
+================================================================================
+ID: 10048714011
+Path: Electronics/Camera & Photo/Video/Body Mounted Cameras
+Tags: electronics, camera, photo, video, body, mounted, cameras, body mounted, mounted cameras
+
+================================================================================
+ID: 10049077011
+Path: Home & Kitchen/Kitchen & Dining/Storage & Organization/Food Storage/Cupcake Carriers
+Tags: home, kitchen, dining, storage, organization, food, food storage, cupcake, carriers, cupcake carriers
+
+================================================================================
+ID: 10049079011
+Path: Industrial & Scientific/Food Service Equipment & Supplies/Tabletop & Serveware/Serveware & Accessories/Cupcake Stands
+Tags: industrial, scientific, food, service, equipment, food service, service equipment, supplies, tabletop, serveware, accessories, cupcake, stands, cupcake stands
+
+================================================================================
+ID: 10056623011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Bassoons
+Tags: books, arts, photography, music, songbooks, woodwinds, bassoons
+
+================================================================================
+ID: 10056624011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Clarinets
+Tags: books, arts, photography, music, songbooks, woodwinds, clarinets
+
+================================================================================
+ID: 10056625011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Flutes
+Tags: books, arts, photography, music, songbooks, woodwinds, flutes
+
+================================================================================
+ID: 10056627011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Harmonicas
+Tags: books, arts, photography, music, songbooks, woodwinds, harmonicas
+
+================================================================================
+ID: 10056628011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Oboes
+Tags: books, arts, photography, music, songbooks, woodwinds, oboes
+
+================================================================================
+ID: 10056629011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Recorders
+Tags: books, arts, photography, music, songbooks, woodwinds, recorders
+
+================================================================================
+ID: 10056630011
+Path: Books/Arts & Photography/Music/Songbooks/Woodwinds/Saxophones
+Tags: books, arts, photography, music, songbooks, woodwinds, saxophones
+
+================================================================================
+ID: 10056632011
+Path: Books/Arts & Photography/Music/Songbooks/Strings/Cellos
+Tags: books, arts, photography, music, songbooks, strings, cellos
+
+================================================================================
+ID: 10056634011
+Path: Books/Arts & Photography/Music/Songbooks/Strings/Harps
+Tags: books, arts, photography, music, songbooks, strings, harps
+
+================================================================================
+ID: 10056635011
+Path: Books/Arts & Photography/Music/Songbooks/Strings/Viola
+Tags: books, arts, photography, music, songbooks, strings, viola
+
+================================================================================
+ID: 10056636011
+Path: Books/Arts & Photography/Music/Songbooks/Strings/Violins
+Tags: books, arts, photography, music, songbooks, strings, violins
+
+================================================================================
+ID: 10056638011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Banjos
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments, banjos
+
+================================================================================
+ID: 10056639011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Bass Guitars
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments, bass, bass guitars
+
+================================================================================
+ID: 10056640011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Electric Bass & Guitar
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments, electric, bass, electric bass, guitar
+
+================================================================================
+ID: 10056642011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Guitars
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments
+
+================================================================================
+ID: 10056643011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Mandolins
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments, mandolins
+
+================================================================================
+ID: 10056644011
+Path: Books/Arts & Photography/Music/Songbooks/Guitars & Fretted Instruments/Ukuleles
+Tags: books, arts, photography, music, songbooks, guitars, fretted, instruments, fretted instruments, ukuleles
+
+================================================================================
+ID: 10063711011
+Path: Electronics/Accessories & Supplies/Batteries, Chargers & Accessories/Battery Chargers
+Tags: electronics, accessories, supplies, batteries, chargers, battery, battery chargers
+
+================================================================================
+ID: 1007
+Path: Books/Crafts, Hobbies & Home/Home Improvement & Design/Residential Architecture
+Tags: books, crafts, hobbies, home, improvement, home improvement, design, residential, architecture, residential architecture
+
+================================================================================
+ID: 10075825011
+Path: Books/Comics & Graphic Novels/Graphic Novels/Adaptations
+Tags: books, comics, graphic, novels, graphic novels, adaptations
+
+================================================================================
+ID: 10075827011
+Path: Books/Cookbooks, Food & Wine/Special Diet/High Protein
+Tags: books, cookbooks, food, wine, special, diet, special diet, high, protein, high protein
+
+================================================================================
+ID: 10075829011
+Path: Books/Health, Fitness & Dieting/Sports Health & Safety
+Tags: books, health, fitness, dieting, sports, sports health, safety
+
+================================================================================
+ID: 10079990011
+Path: Health & Personal Care/Health Care/OTC Medications & Treatments
+Tags: health, personal, care, personal care, health care, otc, medications, otc medications, treatments
+
+================================================================================
+ID: 10079992011
+Path: Beauty/Oral Care
+Tags: beauty, oral, care, oral care
+
+================================================================================
+ID: 10079994011
+Path: Health & Personal Care/Vision Care
+Tags: health, personal, care, personal care, vision, vision care
+
+================================================================================
+ID: 10079996011
+Path: Health & Personal Care/Wellness & Relaxation
+Tags: health, personal, care, personal care, wellness, relaxation
+
+================================================================================
+ID: 10079998011
+Path: Health & Personal Care/Wellness & Relaxation/Fitness & Activity Monitors
+Tags: health, personal, care, personal care, wellness, relaxation, fitness, activity, monitors, activity monitors
+
+================================================================================
+ID: 1008
+Path: Books/Arts & Photography/Architecture/Individual Architects & Firms
+Tags: books, arts, photography, architecture, individual, architects, individual architects, firms
+
+================================================================================
+ID: 10080000011
+Path: Health & Personal Care/Wellness & Relaxation/Massage Tools & Equipment
+Tags: health, personal, care, personal care, wellness, relaxation, massage, tools, massage tools, equipment
+
+================================================================================
+ID: 10088
+Path: Books/Literature & Fiction/British & Irish/Contemporary
+Tags: books, literature, fiction, british, irish, contemporary
+
+================================================================================
+ID: 10090
+Path: Books/Literature & Fiction/British & Irish/Historical
+Tags: books, literature, fiction, british, irish, historical
+
+================================================================================
+ID: 10094987011
+Path: Books/Arts & Photography/Music/Theory, Composition & Performance/Lyrics
+Tags: books, arts, photography, music, theory, composition, performance, lyrics
+
+================================================================================
+ID: 10095049011
+Path: Books/Arts & Photography/Music/Songbooks/Blank Sheet Music
+Tags: books, arts, photography, music, songbooks, blank, sheet, blank sheet, sheet music
+
+================================================================================
+ID: 10096
+Path: Books/Literature & Fiction/Poetry/Regional & Cultural/European/British & Irish
+Tags: books, literature, fiction, poetry, regional, cultural, european, british, irish
+
+================================================================================
+ID: 10098628011
+Path: Video Games/Microconsoles/Ouya
+Tags: video, games, video games, microconsoles, ouya
+
+================================================================================
+ID: 10099177011
+Path: Books/Arts & Photography/Music/Songbooks/Brass/French Horns
+Tags: books, arts, photography, music, songbooks, brass, french, horns, french horns
+
+================================================================================
+ID: 10099184011
+Path: Books/Arts & Photography/Music/Songbooks/Brass/Trombones
+Tags: books, arts, photography, music, songbooks, brass, trombones
