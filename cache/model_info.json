@@ -1,0 +1,8 @@
+{
+  "model_name": "intfloat/e5-base-v2",
+  "embedding_dim": 768,
+  "num_categories": 33303,
+  "max_depth": 10,
+  "has_auto_tags": true,
+  "device": "cuda"
+}

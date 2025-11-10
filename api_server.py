@@ -670,18 +670,27 @@
 #         print(f"\n❌ UNEXPECTED ERROR: {e}\n")
 
 
+
+
 """
-🎯 FIXED API SERVER - Works with Both Training Scripts
-========================================================
-✅ Works with train.py (3-model ensemble)
-✅ Works with train_enhanced.py (single model, better weighting)
+🎯 FIXED PRODUCTION API SERVER - Enhanced Category Prediction
+==============================================================
+✅ Compatible with E5-Large training (1024D)
+✅ Proper E5 query formatting (query: prefix)
 ✅ Better confidence calculation
-✅ Improved query building
+✅ Windows + NVIDIA GPU optimized
+✅ Improved error handling
+✅ Batch processing support
 
 Usage:
-    python api_server_fixed.py
+    python api_server.py
     
 Then visit: http://localhost:5000
+
+API Endpoints:
+    POST /classify - Single product classification
+    POST /api/batch - Batch classification (max 100)
+    GET /health - Health check
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -693,6 +702,13 @@ from pathlib import Path
 import time
 import re
 import sys
+import os
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Fix Windows CUDA issues
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 app = Flask(__name__)
 
@@ -706,6 +722,7 @@ encoder = None
 faiss_index = None
 metadata = []
 cross_store_synonyms = {}
+model_info = {}
 
 
 # ============================================================================
@@ -713,7 +730,7 @@ cross_store_synonyms = {}
 # ============================================================================
 
 def load_cross_store_synonyms():
-    """Load AI-generated synonyms"""
+    """Load AI-generated synonyms with format handling"""
     synonyms_file = CACHE_DIR / 'cross_store_synonyms.pkl'
     
     if synonyms_file.exists():
@@ -721,6 +738,23 @@ def load_cross_store_synonyms():
         try:
             with open(synonyms_file, 'rb') as f:
                 synonyms = pickle.load(f)
+            
+            # Handle different formats
+            if synonyms and list(synonyms.values()):
+                first_val = list(synonyms.values())[0]
+                
+                if isinstance(first_val, list) and first_val:
+                    if isinstance(first_val[0], tuple):
+                        # New format: [(syn, conf, src), ...] → extract synonyms only
+                        cleaned = {}
+                        for term, syn_list in synonyms.items():
+                            cleaned[term] = {syn for syn, conf, src in syn_list}
+                        synonyms = cleaned
+                    elif isinstance(first_val[0], str):
+                        # List of strings format
+                        synonyms = {k: set(v) for k, v in synonyms.items()}
+                # Set format is already good
+            
             print(f"✅ Loaded {len(synonyms):,} AI-generated synonym mappings")
             
             if synonyms and len(synonyms) > 3:
@@ -747,39 +781,37 @@ def load_cross_store_synonyms():
 def build_basic_synonyms():
     """Basic fallback synonyms"""
     synonyms = {
+        # Automotive
+        'strut': {'suspension strut', 'shock strut', 'suspension'},
+        'compressor': {'compression tool', 'compressing tool', 'compress'},
+        'oxygen sensor': {'o2 sensor', 'lambda sensor', 'oxygen probe', 'o2 probe'},
+        'hydraulic': {'hydraulic fluid', 'hydraulic oil', 'fluid'},
+        'paint': {'coating', 'automotive paint', 'car paint', 'spray paint'},
+        
         # Footwear
         'shoes': {'footwear', 'sneakers', 'boots'},
-        'sneakers': {'shoes', 'trainers', 'athletic shoes', 'running shoes', 'tennis shoes'},
-        'running shoes': {'sneakers', 'trainers', 'athletic shoes', 'jogging shoes', 'sports shoes'},
+        'sneakers': {'shoes', 'trainers', 'athletic shoes', 'running shoes'},
         'boots': {'footwear', 'shoes'},
-        'sandals': {'footwear', 'shoes', 'flip flops', 'slippers'},
-        
-        # Athletic
-        'running': {'jogging', 'athletic', 'sports', 'training', 'exercise'},
-        'athletic': {'sports', 'running', 'training', 'exercise', 'fitness'},
-        'sports': {'athletic', 'running', 'training', 'exercise'},
         
         # Clothing
         'pants': {'trousers', 'slacks', 'bottoms'},
-        'track pants': {'joggers', 'sweatpants', 'athletic pants', 'running pants'},
+        'track pants': {'joggers', 'sweatpants', 'athletic pants'},
         'shirt': {'top', 'blouse', 'tee'},
         'jacket': {'coat', 'outerwear'},
-        'tuxedo': {'formal wear', 'suit', 'dress suit', 'black tie'},
         
         # Electronics
         'tv': {'television', 'smart tv', 'display'},
-        'phone': {'mobile', 'smartphone', 'cell phone', 'cellular'},
+        'phone': {'mobile', 'smartphone', 'cell phone'},
         'laptop': {'notebook', 'computer', 'portable computer'},
-        'tablet': {'ipad', 'tab', 'slate'},
         
         # Appliances
-        'washing machine': {'washer', 'laundry machine', 'clothes washer'},
-        'refrigerator': {'fridge', 'cooler', 'icebox'},
+        'washing machine': {'washer', 'laundry machine'},
+        'refrigerator': {'fridge', 'cooler'},
         
         # General
         'kids': {'children', 'childrens', 'youth', 'junior'},
         'women': {'womens', 'ladies', 'female'},
-        'men': {'mens', 'male', 'guys', 'gentlemen'},
+        'men': {'mens', 'male', 'guys'},
     }
     
     # Build bidirectional
@@ -823,8 +855,10 @@ def extract_cross_store_terms(text):
         if len(word) > 2:
             all_terms.add(word)
             if word in cross_store_synonyms:
-                syns = list(cross_store_synonyms[word])[:5]  # Limit to 5 best
-                all_terms.update(syns)
+                syns_data = cross_store_synonyms[word]
+                if isinstance(syns_data, (list, set)):
+                    syns = list(syns_data)[:5]
+                    all_terms.update(syns)
     
     # 2-word phrases + synonyms
     for i in range(len(words) - 1):
@@ -832,8 +866,10 @@ def extract_cross_store_terms(text):
             phrase = f"{words[i]} {words[i+1]}"
             all_terms.add(phrase)
             if phrase in cross_store_synonyms:
-                syns = list(cross_store_synonyms[phrase])[:5]
-                all_terms.update(syns)
+                syns_data = cross_store_synonyms[phrase]
+                if isinstance(syns_data, (list, set)):
+                    syns = list(syns_data)[:5]
+                    all_terms.update(syns)
     
     # 3-word phrases + synonyms
     if len(words) >= 3:
@@ -842,14 +878,16 @@ def extract_cross_store_terms(text):
                 phrase = f"{words[i]} {words[i+1]} {words[i+2]}"
                 all_terms.add(phrase)
                 if phrase in cross_store_synonyms:
-                    syns = list(cross_store_synonyms[phrase])[:3]
-                    all_terms.update(syns)
+                    syns_data = cross_store_synonyms[phrase]
+                    if isinstance(syns_data, (list, set)):
+                        syns = list(syns_data)[:3]
+                        all_terms.update(syns)
     
     return list(all_terms)
 
 
 def build_enhanced_query(title, description=""):
-    """Build enhanced query with STRONG emphasis on key terms"""
+    """Build enhanced query with E5 formatting (query: prefix)"""
     # Extract all terms with synonyms
     all_terms = extract_cross_store_terms(f"{title} {description}")
     
@@ -857,10 +895,13 @@ def build_enhanced_query(title, description=""):
     title_clean = clean_text(title)
     title_words = [w for w in title_clean.split() if len(w) > 2]
     
-    # Build query with emphasis
+    # Build query with emphasis (CRITICAL: using "query:" prefix for E5)
     components = []
     
-    # 1. Original title - MAXIMUM emphasis (15x)
+    # E5 model prefix - CRITICAL!
+    components.append("query:")
+    
+    # 1. Original title - MAXIMUM emphasis (15x to match training)
     components.append(' '.join([title_clean] * 15))
     
     # 2. Key title words - HIGH emphasis (10x each)
@@ -884,18 +925,22 @@ def build_enhanced_query(title, description=""):
 
 
 def encode_query(text):
-    """Encode query using the trained model"""
-    embedding = encoder.encode(
-        text,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=False
-    )
-    
-    if embedding.ndim == 1:
-        embedding = embedding.reshape(1, -1)
-    
-    return embedding.astype('float32')
+    """Encode query using the trained model with normalization"""
+    try:
+        embedding = encoder.encode(
+            text,
+            convert_to_numpy=True,
+            normalize_embeddings=True,  # CRITICAL for Inner Product search
+            show_progress_bar=False
+        )
+        
+        if embedding.ndim == 1:
+            embedding = embedding.reshape(1, -1)
+        
+        return embedding.astype('float32')
+    except Exception as e:
+        print(f"❌ Encoding error: {e}")
+        raise
 
 
 def classify_product(title, description="", top_k=5):
@@ -905,81 +950,91 @@ def classify_product(title, description="", top_k=5):
     """
     start_time = time.time()
     
-    # Build enhanced query
-    query, matched_terms = build_enhanced_query(title, description)
-    
-    # Encode query
-    query_embedding = encode_query(query)
-    
-    # Search FAISS index
-    distances, indices = faiss_index.search(query_embedding, top_k)
-    
-    # Get results
-    results = []
-    for i in range(len(indices[0])):
-        idx = indices[0][i]
-        if idx < len(metadata):
-            meta = metadata[idx]
-            
-            # Better confidence calculation
-            # FAISS returns cosine similarity (higher = better)
-            # Convert to percentage with better scaling
-            raw_score = float(distances[0][i])
-            
-            # Scale to percentage (cosine similarity is [-1, 1], but normalized embeddings give [0, 1])
-            # Apply power scaling to spread out the scores
-            confidence = (raw_score ** 0.5) * 100  # Square root to spread scores
-            
-            levels = meta.get('levels', [])
-            final_product = levels[-1] if levels else meta['category_path'].split('/')[-1]
-            
-            results.append({
-                'rank': i + 1,
-                'category_id': meta['category_id'],
-                'category_path': meta['category_path'],
-                'final_product': final_product,
-                'confidence': round(confidence, 2),
-                'depth': meta.get('depth', 0),
-                'raw_score': round(raw_score, 4)
-            })
-    
-    best = results[0] if results else None
-    
-    if not best:
+    try:
+        # Build enhanced query
+        query, matched_terms = build_enhanced_query(title, description)
+        
+        # Encode query
+        query_embedding = encode_query(query)
+        
+        # Search FAISS index (Inner Product for normalized embeddings)
+        distances, indices = faiss_index.search(query_embedding, top_k)
+        
+        # Get results
+        results = []
+        for i in range(len(indices[0])):
+            idx = indices[0][i]
+            if idx < len(metadata):
+                meta = metadata[idx]
+                
+                # FAISS IndexFlatIP returns dot product (higher = better)
+                raw_score = float(distances[0][i])
+                
+                # Convert to percentage (0-100 scale)
+                # Since embeddings are normalized, dot product is cosine similarity
+                # Apply power scaling to spread scores
+                confidence = min(100, max(0, (raw_score ** 0.5) * 100))
+                
+                levels = meta.get('levels', [])
+                final_product = levels[-1] if levels else meta['category_path'].split('/')[-1]
+                
+                results.append({
+                    'rank': i + 1,
+                    'category_id': meta['category_id'],
+                    'category_path': meta['category_path'],
+                    'final_product': final_product,
+                    'confidence': round(confidence, 2),
+                    'depth': meta.get('depth', 0),
+                    'raw_score': round(raw_score, 4)
+                })
+        
+        best = results[0] if results else None
+        
+        if not best:
+            return {
+                'error': 'No results found',
+                'product': title
+            }
+        
+        # Confidence level
+        conf_pct = best['confidence']
+        if conf_pct >= 90:
+            conf_level = "EXCELLENT"
+        elif conf_pct >= 85:
+            conf_level = "VERY_HIGH"
+        elif conf_pct >= 80:
+            conf_level = "HIGH"
+        elif conf_pct >= 75:
+            conf_level = "GOOD"
+        elif conf_pct >= 70:
+            conf_level = "MEDIUM"
+        else:
+            conf_level = "LOW"
+        
+        processing_time = (time.time() - start_time) * 1000
+        
         return {
-            'error': 'No results found',
-            'product': title
+            'product': title,
+            'category_id': best['category_id'],
+            'category_path': best['category_path'],
+            'final_product': best['final_product'],
+            'confidence': f"{conf_level} ({conf_pct:.2f}%)",
+            'confidence_percent': conf_pct,
+            'confidence_level': conf_level,
+            'depth': best['depth'],
+            'matched_terms': matched_terms,
+            'top_5_results': results,
+            'processing_time_ms': round(processing_time, 2)
         }
     
-    # Confidence level
-    conf_pct = best['confidence']
-    if conf_pct >= 90:
-        conf_level = "EXCELLENT"
-    elif conf_pct >= 85:
-        conf_level = "VERY HIGH"
-    elif conf_pct >= 80:
-        conf_level = "HIGH"
-    elif conf_pct >= 75:
-        conf_level = "GOOD"
-    elif conf_pct >= 70:
-        conf_level = "MEDIUM"
-    else:
-        conf_level = "LOW"
-    
-    processing_time = (time.time() - start_time) * 1000
-    
-    return {
-        'product': title,
-        'category_id': best['category_id'],
-        'category_path': best['category_path'],
-        'final_product': best['final_product'],
-        'confidence': f"{conf_level} ({conf_pct:.2f}%)",
-        'confidence_percent': conf_pct,
-        'depth': best['depth'],
-        'matched_terms': matched_terms,
-        'top_5_results': results,
-        'processing_time_ms': round(processing_time, 2)
-    }
+    except Exception as e:
+        print(f"❌ Classification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            'error': str(e),
+            'product': title
+        }
 
 
 # ============================================================================
@@ -988,7 +1043,7 @@ def classify_product(title, description="", top_k=5):
 
 def load_server():
     """Load all trained data"""
-    global encoder, faiss_index, metadata, cross_store_synonyms
+    global encoder, faiss_index, metadata, cross_store_synonyms, model_info
     
     print("\n" + "="*80)
     print("🔄 LOADING TRAINED MODEL")
@@ -997,13 +1052,12 @@ def load_server():
     # Check if training data exists
     index_path = CACHE_DIR / 'main_index.faiss'
     meta_path = CACHE_DIR / 'metadata.pkl'
+    info_path = CACHE_DIR / 'model_info.json'
     
     if not index_path.exists() or not meta_path.exists():
         print("❌ ERROR: Training data not found!")
         print("\n💡 Please run training first:")
         print("   python train_enhanced.py data/category_id_path_only.csv")
-        print("   OR")
-        print("   python train.py data/category_id_path_only.csv")
         print("\nMissing files:")
         if not index_path.exists():
             print(f"   • {index_path}")
@@ -1012,22 +1066,62 @@ def load_server():
         print()
         sys.exit(1)
     
-    # Load model (same as training)
-    print("📥 Loading sentence transformer...")
+    # Load model info
+    if info_path.exists():
+        try:
+            import json
+            with open(info_path, 'r') as f:
+                model_info = json.load(f)
+            print(f"📋 Model info loaded:")
+            print(f"   Model: {model_info.get('model_name', 'unknown')}")
+            print(f"   Embedding dim: {model_info.get('embedding_dim', 'unknown')}")
+            print(f"   Categories: {model_info.get('num_categories', 'unknown'):,}")
+            print()
+        except Exception as e:
+            print(f"⚠️  Could not load model info: {e}\n")
+    
+    # Determine model name (default to E5-Large as per original training)
+    model_name = model_info.get('model_name', 'intfloat/e5-large-v2')
+    
+    # Load model
+    print(f"📥 Loading model: {model_name}...")
     print("   (This may take a minute on first run...)")
-    encoder = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
-    print("✅ Model loaded\n")
+    
+    try:
+        encoder = SentenceTransformer(model_name)
+        
+        # Use GPU if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                encoder = encoder.to('cuda')
+                print("🔥 Using GPU acceleration")
+        except:
+            pass
+        
+        print("✅ Model loaded\n")
+    except Exception as e:
+        print(f"❌ Failed to load model: {e}")
+        sys.exit(1)
     
     # Load FAISS index
     print("📥 Loading FAISS index...")
-    faiss_index = faiss.read_index(str(index_path))
-    print(f"✅ Index loaded ({faiss_index.ntotal:,} vectors)\n")
+    try:
+        faiss_index = faiss.read_index(str(index_path))
+        print(f"✅ Index loaded ({faiss_index.ntotal:,} vectors)\n")
+    except Exception as e:
+        print(f"❌ Failed to load FAISS index: {e}")
+        sys.exit(1)
     
     # Load metadata
     print("📥 Loading metadata...")
-    with open(meta_path, 'rb') as f:
-        metadata = pickle.load(f)
-    print(f"✅ Metadata loaded ({len(metadata):,} categories)\n")
+    try:
+        with open(meta_path, 'rb') as f:
+            metadata = pickle.load(f)
+        print(f"✅ Metadata loaded ({len(metadata):,} categories)\n")
+    except Exception as e:
+        print(f"❌ Failed to load metadata: {e}")
+        sys.exit(1)
     
     # Load AI-generated synonyms
     print("📥 Loading cross-store synonyms...")
@@ -1039,7 +1133,7 @@ def load_server():
 
 
 # ============================================================================
-# HTML INTERFACE (Same as before)
+# HTML INTERFACE
 # ============================================================================
 
 HTML_TEMPLATE = """
@@ -1154,7 +1248,7 @@ HTML_TEMPLATE = """
             font-size: 0.9em;
         }
         .conf-excellent { background: #4caf50; }
-        .conf-very { background: #8bc34a; }
+        .conf-very_high { background: #8bc34a; }
         .conf-high { background: #cddc39; color: #333; }
         .conf-good { background: #ff9800; }
         .conf-medium { background: #ff5722; }
@@ -1198,7 +1292,7 @@ HTML_TEMPLATE = """
         <div class="header">
             <h1>🎯 Product Category Classifier</h1>
             <div class="badge">🤖 AI-Powered</div>
-            <div class="badge">High Accuracy</div>
+            <div class="badge">E5-Large Model</div>
             <div class="badge">Real-Time</div>
         </div>
         
@@ -1206,17 +1300,17 @@ HTML_TEMPLATE = """
             <div class="info-box">
                 <strong>✨ Intelligent Product Classification</strong><br>
                 Enter any product name and get instant category predictions with high accuracy.
-                The system understands variations and synonyms.
+                The system understands variations and synonyms across different stores.
             </div>
             
             <div class="form-group">
                 <label>Product Title *</label>
-                <input type="text" id="title" placeholder="e.g., Women Track Pants, Nike Running Shoes, Smart TV" />
+                <input type="text" id="title" placeholder="e.g., Strut Compressor Tool, O2 Sensor Removal Kit" />
                 <div class="example-links">
-                    <div class="example-link" onclick="setExample('Nike Running Shoes for Men', '')">Running Shoes</div>
-                    <div class="example-link" onclick="setExample('Women Solid Grey Track Pants', '')">Track Pants</div>
-                    <div class="example-link" onclick="setExample('Samsung Smart TV 55 inch 4K', '')">Smart TV</div>
-                    <div class="example-link" onclick="setExample('LG Front Load Washing Machine', '')">Washing Machine</div>
+                    <div class="example-link" onclick="setExample('Strut Compressor Tool', '')">Strut Compressor</div>
+                    <div class="example-link" onclick="setExample('O2 Sensor Removal Kit', '')">O2 Sensor Tool</div>
+                    <div class="example-link" onclick="setExample('Hydraulic Oil Additive', '')">Hydraulic Additive</div>
+                    <div class="example-link" onclick="setExample('Car Body Paint Spray', '')">Body Paint</div>
                 </div>
             </div>
             
@@ -1303,12 +1397,21 @@ HTML_TEMPLATE = """
                     body: JSON.stringify({ title, description: desc })
                 });
                 
-                if (!response.ok) throw new Error('Classification failed');
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Classification failed');
+                }
                 
                 const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
                 displayResults(data);
             } catch (error) {
                 alert('Error: ' + error.message);
+                console.error('Classification error:', error);
             } finally {
                 document.getElementById('loading').classList.remove('show');
                 btn.disabled = false;
@@ -1328,8 +1431,8 @@ HTML_TEMPLATE = """
             
             const conf = document.getElementById('confidence');
             conf.textContent = data.confidence;
-            const confClass = data.confidence.split(' ')[0].toLowerCase().replace('_', '-');
-            conf.className = 'tag conf-' + confClass;
+            const confLevel = data.confidence_level || data.confidence.split(' ')[0];
+            conf.className = 'tag conf-' + confLevel.toLowerCase();
             
             const matchedHtml = data.matched_terms.map(t => `<span class="tag">${t}</span>`).join('');
             document.getElementById('matchedTerms').innerHTML = matchedHtml || '<span class="tag">No variations found</span>';
@@ -1375,6 +1478,10 @@ def classify_route():
     """API endpoint for classification"""
     try:
         data = request.json
+        
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
         title = data.get('title', '').strip()
         description = data.get('description', '').strip()
         
@@ -1382,6 +1489,10 @@ def classify_route():
             return jsonify({'error': 'Title required'}), 400
         
         result = classify_product(title, description)
+        
+        if 'error' in result:
+            return jsonify(result), 500
+        
         return jsonify(result)
     
     except Exception as e:
@@ -1398,9 +1509,54 @@ def health():
         'status': 'healthy',
         'categories': len(metadata),
         'cross_store_synonyms': len(cross_store_synonyms),
-        'model': 'all-mpnet-base-v2',
+        'model': model_info.get('model_name', 'unknown'),
+        'embedding_dim': model_info.get('embedding_dim', 'unknown'),
         'synonym_source': 'AI-generated' if len(cross_store_synonyms) > 50 else 'basic'
     })
+
+
+@app.route('/api/batch', methods=['POST'])
+def batch_classify():
+    """Batch classification endpoint"""
+    try:
+        data = request.json
+        
+        if not data or 'products' not in data:
+            return jsonify({'error': 'products array required'}), 400
+        
+        products = data.get('products', [])
+        
+        if not isinstance(products, list):
+            return jsonify({'error': 'products must be an array'}), 400
+        
+        if len(products) > 100:
+            return jsonify({'error': 'Maximum 100 products per batch'}), 400
+        
+        results = []
+        for product in products:
+            if isinstance(product, dict):
+                title = product.get('title', '').strip()
+                description = product.get('description', '').strip()
+            else:
+                title = str(product).strip()
+                description = ''
+            
+            if title:
+                result = classify_product(title, description, top_k=3)
+                results.append(result)
+            else:
+                results.append({'error': 'Empty title', 'product': ''})
+        
+        return jsonify({
+            'count': len(results),
+            'results': results
+        })
+    
+    except Exception as e:
+        print(f"Error during batch classification: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================
@@ -1414,11 +1570,18 @@ if __name__ == '__main__':
         print("🌐 Server starting...")
         print("   URL: http://localhost:5000")
         print("   API: http://localhost:5000/classify (POST)")
+        print("   Batch: http://localhost:5000/api/batch (POST)")
         print("   Health: http://localhost:5000/health")
-        print("   Press CTRL+C to stop\n")
+        print("\n📖 Example API usage:")
+        print("   curl -X POST http://localhost:5000/classify \\")
+        print('     -H "Content-Type: application/json" \\')
+        print('     -d \'{"title": "Strut Compressor Tool"}\'')
+        print("\n   Press CTRL+C to stop\n")
         
         app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
         
+    except KeyboardInterrupt:
+        print("\n\n👋 Server stopped by user")
     except Exception as e:
         print(f"\n❌ ERROR: {e}\n")
         import traceback
