@@ -672,25 +672,24 @@
 
 
 
+
+#!/usr/bin/env python3
 """
-🎯 FIXED PRODUCTION API SERVER - Enhanced Category Prediction
-==============================================================
-✅ Compatible with E5-Large training (1024D)
-✅ Proper E5 query formatting (query: prefix)
-✅ Better confidence calculation
-✅ Windows + NVIDIA GPU optimized
-✅ Improved error handling
-✅ Batch processing support
+API Server for product category classification
+Merged UI + classification logic
+Model: intfloat/e5-base-v2 (must match training)
 
 Usage:
     python api_server.py
-    
-Then visit: http://localhost:5000
 
-API Endpoints:
-    POST /classify - Single product classification
-    POST /api/batch - Batch classification (max 100)
-    GET /health - Health check
+Requirements:
+    pip install flask sentence-transformers faiss-cpu numpy pickle5
+
+Files expected in cache/:
+    - main_index.faiss
+    - metadata.pkl
+    - cross_store_synonyms.pkl (optional)
+
 """
 
 from flask import Flask, request, jsonify, render_template_string
@@ -701,442 +700,349 @@ import numpy as np
 from pathlib import Path
 import time
 import re
-import sys
 import os
-import warnings
-
-warnings.filterwarnings('ignore')
-
-# Fix Windows CUDA issues
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-
-app = Flask(__name__)
+from typing import List
 
 # ============================================================================
-# GLOBAL VARIABLES
+# CONFIG
 # ============================================================================
 
 CACHE_DIR = Path('cache')
+MODEL_NAME = 'intfloat/e5-base-v2'  # <-- MUST match the model used during training
+FAISS_INDEX_PATH = CACHE_DIR / 'main_index.faiss'
+METADATA_PATH = CACHE_DIR / 'metadata.pkl'
+SYN_PATH = CACHE_DIR / 'cross_store_synonyms.pkl'
 
+# Server globals
 encoder = None
 faiss_index = None
 metadata = []
 cross_store_synonyms = {}
-model_info = {}
-
 
 # ============================================================================
-# SYNONYM LOADING
+# CROSS-STORE SYNONYM FALLBACK
 # ============================================================================
 
-def load_cross_store_synonyms():
-    """Load AI-generated synonyms with format handling"""
-    synonyms_file = CACHE_DIR / 'cross_store_synonyms.pkl'
-    
-    if synonyms_file.exists():
-        print("📥 Loading AI-generated synonyms...")
-        try:
-            with open(synonyms_file, 'rb') as f:
-                synonyms = pickle.load(f)
-            
-            # Handle different formats
-            if synonyms and list(synonyms.values()):
-                first_val = list(synonyms.values())[0]
-                
-                if isinstance(first_val, list) and first_val:
-                    if isinstance(first_val[0], tuple):
-                        # New format: [(syn, conf, src), ...] → extract synonyms only
-                        cleaned = {}
-                        for term, syn_list in synonyms.items():
-                            cleaned[term] = {syn for syn, conf, src in syn_list}
-                        synonyms = cleaned
-                    elif isinstance(first_val[0], str):
-                        # List of strings format
-                        synonyms = {k: set(v) for k, v in synonyms.items()}
-                # Set format is already good
-            
-            print(f"✅ Loaded {len(synonyms):,} AI-generated synonym mappings")
-            
-            if synonyms and len(synonyms) > 3:
-                sample_terms = list(synonyms.keys())[:3]
-                print("📝 Sample synonyms:")
-                for term in sample_terms:
-                    if term in synonyms:
-                        syns = list(synonyms[term])[:2]
-                        print(f"   • {term} → {', '.join(syns)}")
-                print()
-            
-            return synonyms
-        except Exception as e:
-            print(f"⚠️  Error loading AI synonyms: {e}")
-            print("   Falling back to basic synonyms...\n")
-    else:
-        print("⚠️  AI-generated synonyms not found at:", synonyms_file)
-        print("   💡 Generate them with: python synonym_manager.py autobuild data/category_id_path_only.csv")
-        print("   Falling back to basic synonyms for now...\n")
-    
-    return build_basic_synonyms()
-
-
-def build_basic_synonyms():
-    """Basic fallback synonyms"""
+def build_cross_store_synonyms():
+    """Default cross-store synonyms fallback (bidirectional mapping).
+    If you have a trained cross_store_synonyms.pkl produced by training, the
+    server will load that file instead. This function only used when no file
+    exists in the cache.
+    """
     synonyms = {
-        # Automotive
-        'strut': {'suspension strut', 'shock strut', 'suspension'},
-        'compressor': {'compression tool', 'compressing tool', 'compress'},
-        'oxygen sensor': {'o2 sensor', 'lambda sensor', 'oxygen probe', 'o2 probe'},
-        'hydraulic': {'hydraulic fluid', 'hydraulic oil', 'fluid'},
-        'paint': {'coating', 'automotive paint', 'car paint', 'spray paint'},
-        
-        # Footwear
-        'shoes': {'footwear', 'sneakers', 'boots'},
-        'sneakers': {'shoes', 'trainers', 'athletic shoes', 'running shoes'},
-        'boots': {'footwear', 'shoes'},
-        
-        # Clothing
+        'washing machine': {'laundry machine', 'washer', 'clothes washer', 'washing appliance'},
+        'laundry machine': {'washing machine', 'washer', 'clothes washer'},
+        'dryer': {'drying machine', 'clothes dryer', 'tumble dryer'},
+        'refrigerator': {'fridge', 'cooler', 'ice box', 'cooling appliance'},
+        'dishwasher': {'dish washer', 'dish cleaning machine'},
+        'microwave': {'microwave oven', 'micro wave'},
+        'vacuum': {'vacuum cleaner', 'hoover', 'vac'},
+        'tv': {'television', 'telly', 'smart tv', 'display'},
+        'laptop': {'notebook', 'portable computer', 'laptop computer'},
+        'mobile': {'phone', 'cell phone', 'smartphone', 'cellphone'},
+        'tablet': {'ipad', 'tab', 'tablet computer'},
+        'headphones': {'headset', 'earphones', 'earbuds', 'ear buds'},
+        'speaker': {'audio speaker', 'sound system', 'speakers'},
+        'sofa': {'couch', 'settee', 'divan'},
+        'wardrobe': {'closet', 'armoire', 'cupboard'},
+        'drawer': {'chest of drawers', 'dresser'},
         'pants': {'trousers', 'slacks', 'bottoms'},
-        'track pants': {'joggers', 'sweatpants', 'athletic pants'},
-        'shirt': {'top', 'blouse', 'tee'},
-        'jacket': {'coat', 'outerwear'},
-        
-        # Electronics
-        'tv': {'television', 'smart tv', 'display'},
-        'phone': {'mobile', 'smartphone', 'cell phone'},
-        'laptop': {'notebook', 'computer', 'portable computer'},
-        
-        # Appliances
-        'washing machine': {'washer', 'laundry machine'},
-        'refrigerator': {'fridge', 'cooler'},
-        
-        # General
-        'kids': {'children', 'childrens', 'youth', 'junior'},
-        'women': {'womens', 'ladies', 'female'},
-        'men': {'mens', 'male', 'guys'},
+        'sweater': {'jumper', 'pullover', 'sweatshirt'},
+        'sneakers': {'trainers', 'tennis shoes', 'running shoes'},
+        'jacket': {'coat', 'blazer', 'outerwear'},
+        'cooker': {'stove', 'range', 'cooking range'},
+        'blender': {'mixer', 'food processor', 'liquidizer'},
+        'kettle': {'electric kettle', 'water boiler'},
+        'stroller': {'pram', 'pushchair', 'buggy', 'baby carriage'},
+        'diaper': {'nappy', 'nappies'},
+        'pacifier': {'dummy', 'soother'},
+        'wrench': {'spanner', 'adjustable wrench'},
+        'flashlight': {'torch', 'flash light'},
+        'screwdriver': {'screw driver'},
+        'tap': {'faucet', 'water tap'},
+        'bin': {'trash can', 'garbage can', 'waste bin'},
+        'curtain': {'drape', 'window covering'},
+        'guillotine': {'paper cutter', 'paper trimmer', 'blade cutter'},
+        'trimmer': {'cutter', 'cutting tool', 'edge cutter'},
+        'stapler': {'stapling machine', 'staple gun'},
+        'magazine': {'periodical', 'journal', 'publication'},
+        'comic': {'comic book', 'graphic novel', 'manga'},
+        'ebook': {'e-book', 'digital book', 'electronic book'},
+        'kids': {'children', 'child', 'childrens', 'youth', 'junior'},
+        'women': {'womens', 'ladies', 'female', 'lady'},
+        'men': {'mens', 'male', 'gentleman'},
+        'baby': {'infant', 'newborn', 'toddler'},
     }
-    
-    # Build bidirectional
+
     expanded = {}
     for term, syns in synonyms.items():
-        expanded[term] = syns.copy()
+        expanded[term] = set(syns)
         for syn in syns:
             if syn not in expanded:
                 expanded[syn] = set()
             expanded[syn].add(term)
             expanded[syn].update(syns - {syn})
-    
-    print(f"📚 Using {len(expanded)} basic synonym mappings\n")
     return expanded
 
-
 # ============================================================================
-# HELPER FUNCTIONS
+# TEXT CLEANING / QUERY BUILDING
 # ============================================================================
 
-def clean_text(text):
-    """Clean and normalize text"""
+def clean_text(text: str) -> str:
     if not text:
         return ""
     text = str(text).lower()
-    text = re.sub(r'[^\w\s-]', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
+    # keep alphanumerics, dashes and spaces
+    text = re.sub(r"[^\w\s-]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
-def extract_cross_store_terms(text):
-    """Extract terms with cross-store variations"""
+def extract_cross_store_terms(text: str) -> List[str]:
     cleaned = clean_text(text)
     words = cleaned.split()
-    
+
     all_terms = set()
-    all_terms.add(cleaned)
-    
-    # Single words + synonyms
+    all_terms.add(cleaned)  # full cleaned text
+
+    # single words + synonyms
     for word in words:
         if len(word) > 2:
             all_terms.add(word)
             if word in cross_store_synonyms:
-                syns_data = cross_store_synonyms[word]
-                if isinstance(syns_data, (list, set)):
-                    syns = list(syns_data)[:5]
-                    all_terms.update(syns)
-    
-    # 2-word phrases + synonyms
+                all_terms.update(cross_store_synonyms[word])
+
+    # 2-word phrases
     for i in range(len(words) - 1):
-        if len(words[i]) > 2 and len(words[i+1]) > 2:
+        if len(words[i]) > 2 and len(words[i + 1]) > 2:
             phrase = f"{words[i]} {words[i+1]}"
             all_terms.add(phrase)
             if phrase in cross_store_synonyms:
-                syns_data = cross_store_synonyms[phrase]
-                if isinstance(syns_data, (list, set)):
-                    syns = list(syns_data)[:5]
-                    all_terms.update(syns)
-    
-    # 3-word phrases + synonyms
+                all_terms.update(cross_store_synonyms[phrase])
+
+    # 3-word phrases
     if len(words) >= 3:
         for i in range(len(words) - 2):
-            if all(len(w) > 2 for w in words[i:i+3]):
+            if all(len(w) > 2 for w in words[i:i + 3]):
                 phrase = f"{words[i]} {words[i+1]} {words[i+2]}"
                 all_terms.add(phrase)
-                if phrase in cross_store_synonyms:
-                    syns_data = cross_store_synonyms[phrase]
-                    if isinstance(syns_data, (list, set)):
-                        syns = list(syns_data)[:3]
-                        all_terms.update(syns)
-    
+
     return list(all_terms)
 
-
-def build_enhanced_query(title, description=""):
-    """Build enhanced query with E5 formatting (query: prefix)"""
-    # Extract all terms with synonyms
-    all_terms = extract_cross_store_terms(f"{title} {description}")
-    
-    # Extract main product terms from title
+def build_enhanced_query(title, description="", max_synonyms=10):
+    """Build query emphasizing original title and cross-store variations"""
     title_clean = clean_text(title)
-    title_words = [w for w in title_clean.split() if len(w) > 2]
+    description_clean = clean_text(description)
     
-    # Build query with emphasis (CRITICAL: using "query:" prefix for E5)
-    components = []
-    
-    # E5 model prefix - CRITICAL!
-    components.append("query:")
-    
-    # 1. Original title - MAXIMUM emphasis (15x to match training)
-    components.append(' '.join([title_clean] * 15))
-    
-    # 2. Key title words - HIGH emphasis (10x each)
-    for word in title_words:
-        components.append(' '.join([word] * 10))
-    
-    # 3. Synonym variations - MEDIUM emphasis (5x)
-    components.append(' '.join(all_terms[:20] * 5))
-    
-    # 4. Description if provided - LIGHT emphasis (3x)
-    if description:
-        desc_clean = clean_text(description)
-        components.append(' '.join([desc_clean] * 3))
-    
-    # 5. All variations - once
-    components.append(' '.join(all_terms[:30]))
-    
-    query = ' '.join(components)
-    
-    return query, all_terms[:20]
+    # Extract cross-store variations
+    synonyms_list = extract_cross_store_terms(f"{title_clean} {description_clean}")
 
+    # Emphasize original title 3x, then include top synonyms
+    enhanced_query = ' '.join([title_clean] * 3 + synonyms_list[:max_synonyms])
+    
+    return enhanced_query, synonyms_list[:20]  # return top 20 for matched_terms display
 
-def encode_query(text):
-    """Encode query using the trained model with normalization"""
-    try:
-        embedding = encoder.encode(
-            text,
-            convert_to_numpy=True,
-            normalize_embeddings=True,  # CRITICAL for Inner Product search
-            show_progress_bar=False
-        )
-        
-        if embedding.ndim == 1:
-            embedding = embedding.reshape(1, -1)
-        
-        return embedding.astype('float32')
-    except Exception as e:
-        print(f"❌ Encoding error: {e}")
-        raise
+# ============================================================================
+# ENCODER / FAISS
+# ============================================================================
 
+def encode_query(text: str) -> np.ndarray:
+    embedding = encoder.encode(text, convert_to_numpy=True, normalize_embeddings=True)
+    if embedding.ndim == 1:
+        embedding = embedding.reshape(1, -1)
+    return embedding.astype('float32')
 
 def classify_product(title, description="", top_k=5):
-    """
-    Classify product using trained system
-    Returns: category_id, category_path, confidence, and alternatives
-    """
+    """Classify product using e5-base embeddings with cross-store optimization"""
     start_time = time.time()
     
-    try:
-        # Build enhanced query
-        query, matched_terms = build_enhanced_query(title, description)
-        
-        # Encode query
-        query_embedding = encode_query(query)
-        
-        # Search FAISS index (Inner Product for normalized embeddings)
-        distances, indices = faiss_index.search(query_embedding, top_k)
-        
-        # Get results
-        results = []
-        for i in range(len(indices[0])):
-            idx = indices[0][i]
-            if idx < len(metadata):
-                meta = metadata[idx]
-                
-                # FAISS IndexFlatIP returns dot product (higher = better)
-                raw_score = float(distances[0][i])
-                
-                # Convert to percentage (0-100 scale)
-                # Since embeddings are normalized, dot product is cosine similarity
-                # Apply power scaling to spread scores
-                confidence = min(100, max(0, (raw_score ** 0.5) * 100))
-                
-                levels = meta.get('levels', [])
-                final_product = levels[-1] if levels else meta['category_path'].split('/')[-1]
-                
-                results.append({
-                    'rank': i + 1,
-                    'category_id': meta['category_id'],
-                    'category_path': meta['category_path'],
-                    'final_product': final_product,
-                    'confidence': round(confidence, 2),
-                    'depth': meta.get('depth', 0),
-                    'raw_score': round(raw_score, 4)
-                })
-        
-        best = results[0] if results else None
-        
-        if not best:
-            return {
-                'error': 'No results found',
-                'product': title
-            }
-        
-        # Confidence level
-        conf_pct = best['confidence']
-        if conf_pct >= 90:
-            conf_level = "EXCELLENT"
-        elif conf_pct >= 85:
-            conf_level = "VERY_HIGH"
-        elif conf_pct >= 80:
-            conf_level = "HIGH"
-        elif conf_pct >= 75:
-            conf_level = "GOOD"
-        elif conf_pct >= 70:
-            conf_level = "MEDIUM"
-        else:
-            conf_level = "LOW"
-        
-        processing_time = (time.time() - start_time) * 1000
-        
-        return {
-            'product': title,
-            'category_id': best['category_id'],
-            'category_path': best['category_path'],
-            'final_product': best['final_product'],
-            'confidence': f"{conf_level} ({conf_pct:.2f}%)",
-            'confidence_percent': conf_pct,
-            'confidence_level': conf_level,
-            'depth': best['depth'],
-            'matched_terms': matched_terms,
-            'top_5_results': results,
-            'processing_time_ms': round(processing_time, 2)
-        }
+    # Step 1: Build enhanced query
+    query_text, matched_terms = build_enhanced_query(title, description)
     
-    except Exception as e:
-        print(f"❌ Classification error: {e}")
-        import traceback
-        traceback.print_exc()
+    # Step 2: Encode query
+    query_embedding = encoder.encode(
+        query_text,
+        convert_to_numpy=True,
+        normalize_embeddings=True
+    ).astype('float32')
+    
+    if query_embedding.ndim == 1:
+        query_embedding = query_embedding.reshape(1, -1)
+    
+    # Step 3: FAISS search
+    distances, indices = faiss_index.search(query_embedding, top_k)
+    
+    results = []
+    for i, idx in enumerate(indices[0]):
+        if idx >= len(metadata):
+            continue
+        meta = metadata[idx]
+        # Convert FAISS distance to cosine similarity
+        similarity = 1 - distances[0][i]
+        confidence_pct = float(similarity) * 100
+        
+        final_product = meta.get('levels', [])[-1] if meta.get('levels') else meta['category_path'].split('/')[-1]
+        
+        results.append({
+            'rank': i + 1,
+            'category_id': meta['category_id'],
+            'category_path': meta['category_path'],
+            'final_product': final_product,
+            'confidence': round(confidence_pct, 2),
+            'depth': meta.get('depth', 0)
+        })
+    
+    if not results:
+        return {'error': 'No results found', 'product': title}
+    
+    # Pick best match
+    best = results[0]
+    conf_pct = best['confidence']
+    if conf_pct >= 90:
+        conf_level = "EXCELLENT"
+    elif conf_pct >= 85:
+        conf_level = "VERY HIGH"
+    elif conf_pct >= 80:
+        conf_level = "HIGH"
+    elif conf_pct >= 75:
+        conf_level = "GOOD"
+    elif conf_pct >= 70:
+        conf_level = "MEDIUM"
+    else:
+        conf_level = "LOW"
+    
+    processing_time = (time.time() - start_time) * 1000
+    
+    return {
+        'product': title,
+        'category_id': best['category_id'],
+        'category_path': best['category_path'],
+        'final_product': best['final_product'],
+        'confidence': f"{conf_level} ({conf_pct:.2f}%)",
+        'confidence_percent': conf_pct,
+        'depth': best['depth'],
+        'matched_terms': matched_terms,
+        'top_5_results': results,
+        'processing_time_ms': round(processing_time, 2)
+    }
+    # FAISS returns squared L2 distances or inner product depending on index type.
+    # We'll treat lower distance as better. We convert to a 0-100-ish confidence by
+    # using a simple heuristic: score = 100 - normalized_distance*100 (clamped).
+
+    # Determine a normalization constant: use mean of top distance if available
+    flat_dist = distances[0]
+    max_d = float(np.max(flat_dist)) if flat_dist.size else 1.0
+    min_d = float(np.min(flat_dist)) if flat_dist.size else 0.0
+    range_d = max(1e-6, max_d - min_d)
+
+    for i, idx in enumerate(indices[0]):
+        if idx < 0 or idx >= len(metadata):
+            continue
+        meta = metadata[idx]
+        raw_d = float(distances[0][i])
+        # normalize and invert to make higher -> better
+        norm = (raw_d - min_d) / range_d
+        conf = max(0.0, min(100.0, 100.0 * (1.0 - norm)))
+
+        levels = meta.get('levels') or []
+        final_product = levels[-1] if levels else meta.get('category_path', '').split('/')[-1]
+
+        results.append({
+            'rank': i + 1,
+            'category_id': meta.get('category_id'),
+            'category_path': meta.get('category_path'),
+            'final_product': final_product,
+            'confidence': round(conf, 2),
+            'depth': meta.get('depth', 0)
+        })
+
+    if not results:
         return {
-            'error': str(e),
+            'error': 'No results found',
             'product': title
         }
 
+    best = results[0]
+    conf_pct = best['confidence']
+    if conf_pct >= 90:
+        conf_level = "EXCELLENT"
+    elif conf_pct >= 85:
+        conf_level = "VERY HIGH"
+    elif conf_pct >= 80:
+        conf_level = "HIGH"
+    elif conf_pct >= 75:
+        conf_level = "GOOD"
+    elif conf_pct >= 70:
+        conf_level = "MEDIUM"
+    else:
+        conf_level = "LOW"
+
+    processing_time = (time.time() - start_time) * 1000.0
+
+    return {
+        'product': title,
+        'category_id': best['category_id'],
+        'category_path': best['category_path'],
+        'final_product': best['final_product'],
+        'confidence': f"{conf_level} ({conf_pct:.2f}%)",
+        'confidence_percent': conf_pct,
+        'depth': best['depth'],
+        'matched_terms': matched_terms,
+        'top_5_results': results,
+        'processing_time_ms': round(processing_time, 2)
+    }
 
 # ============================================================================
-# SERVER INITIALIZATION
+# SERVER LOAD
 # ============================================================================
 
 def load_server():
-    """Load all trained data"""
-    global encoder, faiss_index, metadata, cross_store_synonyms, model_info
-    
-    print("\n" + "="*80)
-    print("🔄 LOADING TRAINED MODEL")
-    print("="*80 + "\n")
-    
-    # Check if training data exists
-    index_path = CACHE_DIR / 'main_index.faiss'
-    meta_path = CACHE_DIR / 'metadata.pkl'
-    info_path = CACHE_DIR / 'model_info.json'
-    
-    if not index_path.exists() or not meta_path.exists():
-        print("❌ ERROR: Training data not found!")
-        print("\n💡 Please run training first:")
-        print("   python train_enhanced.py data/category_id_path_only.csv")
-        print("\nMissing files:")
-        if not index_path.exists():
-            print(f"   • {index_path}")
-        if not meta_path.exists():
-            print(f"   • {meta_path}")
-        print()
-        sys.exit(1)
-    
-    # Load model info
-    if info_path.exists():
-        try:
-            import json
-            with open(info_path, 'r') as f:
-                model_info = json.load(f)
-            print(f"📋 Model info loaded:")
-            print(f"   Model: {model_info.get('model_name', 'unknown')}")
-            print(f"   Embedding dim: {model_info.get('embedding_dim', 'unknown')}")
-            print(f"   Categories: {model_info.get('num_categories', 'unknown'):,}")
-            print()
-        except Exception as e:
-            print(f"⚠️  Could not load model info: {e}\n")
-    
-    # Determine model name (default to E5-Large as per original training)
-    model_name = model_info.get('model_name', 'intfloat/e5-large-v2')
-    
-    # Load model
-    print(f"📥 Loading model: {model_name}...")
-    print("   (This may take a minute on first run...)")
-    
-    try:
-        encoder = SentenceTransformer(model_name)
-        
-        # Use GPU if available
-        try:
-            import torch
-            if torch.cuda.is_available():
-                encoder = encoder.to('cuda')
-                print("🔥 Using GPU acceleration")
-        except:
-            pass
-        
-        print("✅ Model loaded\n")
-    except Exception as e:
-        print(f"❌ Failed to load model: {e}")
-        sys.exit(1)
-    
+    global encoder, faiss_index, metadata, cross_store_synonyms
+
+    print('\n' + '=' * 80)
+    print('🔄 LOADING TRAINED MODEL')
+    print('=' * 80 + '\n')
+
+    # Load encoder
+    print('📥 Loading sentence transformer...')
+    encoder = SentenceTransformer(MODEL_NAME)
+    print('✅ Model loaded\n')
+
     # Load FAISS index
-    print("📥 Loading FAISS index...")
-    try:
-        faiss_index = faiss.read_index(str(index_path))
-        print(f"✅ Index loaded ({faiss_index.ntotal:,} vectors)\n")
-    except Exception as e:
-        print(f"❌ Failed to load FAISS index: {e}")
-        sys.exit(1)
-    
+    print('📥 Loading FAISS index...')
+    if not FAISS_INDEX_PATH.exists():
+        raise FileNotFoundError(f"FAISS index not found: {FAISS_INDEX_PATH}\nPlease run training first!")
+    faiss_index = faiss.read_index(str(FAISS_INDEX_PATH))
+    print(f"✅ Index loaded ({faiss_index.ntotal:,} vectors)\n")
+
     # Load metadata
-    print("📥 Loading metadata...")
-    try:
-        with open(meta_path, 'rb') as f:
-            metadata = pickle.load(f)
-        print(f"✅ Metadata loaded ({len(metadata):,} categories)\n")
-    except Exception as e:
-        print(f"❌ Failed to load metadata: {e}")
-        sys.exit(1)
-    
-    # Load AI-generated synonyms
-    print("📥 Loading cross-store synonyms...")
-    cross_store_synonyms = load_cross_store_synonyms()
-    
-    print("="*80)
-    print("✅ SERVER READY!")
-    print("="*80 + "\n")
+    print('📥 Loading metadata...')
+    if not METADATA_PATH.exists():
+        raise FileNotFoundError(f"Metadata not found: {METADATA_PATH}\nPlease run training first!")
+    with open(METADATA_PATH, 'rb') as f:
+        metadata = pickle.load(f)
+    print(f"✅ Metadata loaded ({len(metadata):,} categories)\n")
 
+    # Load or build cross-store synonyms
+    print('📥 Loading cross-store synonyms...')
+    if SYN_PATH.exists():
+        with open(SYN_PATH, 'rb') as f:
+            cross_store_synonyms = pickle.load(f)
+        print(f"✅ Cross-store synonyms loaded ({len(cross_store_synonyms)} terms)\n")
+    else:
+        print('⚠️  Cross-store synonyms not found, building default set...')
+        cross_store_synonyms = build_cross_store_synonyms()
+        print(f"✅ Built {len(cross_store_synonyms)} synonym mappings\n")
+
+    print('=' * 80)
+    print('✅ SERVER READY!')
+    print('=' * 80 + '\n')
 
 # ============================================================================
-# HTML INTERFACE
+# HTML TEMPLATE (same as provided)
 # ============================================================================
 
-HTML_TEMPLATE = """
+HTML_TEMPLATE = r"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -1172,13 +1078,13 @@ HTML_TEMPLATE = """
             padding: 30px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-        .info-box {
-            background: #e3f2fd;
+        .success-box {
+            background: #d4edda;
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 20px;
-            border-left: 4px solid #2196f3;
-            color: #0d47a1;
+            border-left: 4px solid #28a745;
+            color: #155724;
         }
         .form-group { margin-bottom: 20px; }
         label {
@@ -1212,11 +1118,6 @@ HTML_TEMPLATE = """
             transition: transform 0.2s;
         }
         button:hover { transform: translateY(-2px); }
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
         .results { display: none; margin-top: 20px; }
         .results.show { display: block; animation: fadeIn 0.5s; }
         @keyframes fadeIn {
@@ -1248,7 +1149,7 @@ HTML_TEMPLATE = """
             font-size: 0.9em;
         }
         .conf-excellent { background: #4caf50; }
-        .conf-very_high { background: #8bc34a; }
+        .conf-very { background: #8bc34a; }
         .conf-high { background: #cddc39; color: #333; }
         .conf-good { background: #ff9800; }
         .conf-medium { background: #ff5722; }
@@ -1268,64 +1169,40 @@ HTML_TEMPLATE = """
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .example-links {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .example-link {
-            background: #f0f0f0;
-            padding: 8px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9em;
-            transition: background 0.2s;
-        }
-        .example-link:hover {
-            background: #e0e0e0;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🎯 Product Category Classifier</h1>
-            <div class="badge">🤖 AI-Powered</div>
-            <div class="badge">E5-Large Model</div>
+            <div class="badge">Cross-Store Intelligence</div>
+            <div class="badge">Auto-Tag Support</div>
             <div class="badge">Real-Time</div>
         </div>
-        
+
         <div class="card">
-            <div class="info-box">
-                <strong>✨ Intelligent Product Classification</strong><br>
-                Enter any product name and get instant category predictions with high accuracy.
-                The system understands variations and synonyms across different stores.
+            <div class="success-box">
+                <strong>✅ Cross-Store Synonyms Active!</strong><br>
+                Understands: washing machine = laundry machine | tv = television | kids = children
             </div>
-            
+
             <div class="form-group">
                 <label>Product Title *</label>
-                <input type="text" id="title" placeholder="e.g., Strut Compressor Tool, O2 Sensor Removal Kit" />
-                <div class="example-links">
-                    <div class="example-link" onclick="setExample('Strut Compressor Tool', '')">Strut Compressor</div>
-                    <div class="example-link" onclick="setExample('O2 Sensor Removal Kit', '')">O2 Sensor Tool</div>
-                    <div class="example-link" onclick="setExample('Hydraulic Oil Additive', '')">Hydraulic Additive</div>
-                    <div class="example-link" onclick="setExample('Car Body Paint Spray', '')">Body Paint</div>
-                </div>
+                <input type="text" id="title" placeholder="e.g., Washing Machine or Laundry Machine" />
             </div>
-            
+
             <div class="form-group">
                 <label>Description (Optional)</label>
-                <textarea id="desc" placeholder="Additional details like brand, color, size, features..."></textarea>
+                <textarea id="desc" placeholder="Additional details..."></textarea>
             </div>
-            
-            <button onclick="classify()" id="classifyBtn">🎯 Classify Product</button>
-            
+
+            <button onclick="classify()">🎯 Classify Product</button>
+
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p style="margin-top: 10px; color: #666;">Analyzing product...</p>
+                <p style="margin-top: 10px; color: #666;">Analyzing...</p>
             </div>
-            
+
             <div class="results" id="results">
                 <div class="section">
                     <h3>✅ Best Match</h3>
@@ -1354,12 +1231,12 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="section">
-                    <h3>🔗 Matched Terms</h3>
+                    <h3>🔗 Matched Terms (Cross-Store Variations)</h3>
                     <div id="matchedTerms"></div>
                 </div>
-                
+
                 <div class="section">
                     <h3>📋 Top 5 Alternative Matches</h3>
                     <div id="alternatives"></div>
@@ -1367,76 +1244,56 @@ HTML_TEMPLATE = """
             </div>
         </div>
     </div>
-    
+
     <script>
-        function setExample(title, desc) {
-            document.getElementById('title').value = title;
-            document.getElementById('desc').value = desc;
-        }
-        
         async function classify() {
             const title = document.getElementById('title').value.trim();
             const desc = document.getElementById('desc').value.trim();
-            
+
             if (!title) {
                 alert('Please enter a product title');
                 return;
             }
-            
-            const btn = document.getElementById('classifyBtn');
-            btn.disabled = true;
-            btn.textContent = '🔄 Analyzing...';
-            
+
             document.getElementById('loading').classList.add('show');
             document.getElementById('results').classList.remove('show');
-            
+
             try {
                 const response = await fetch('/classify', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, description: desc })
                 });
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Classification failed');
-                }
-                
+
+                if (!response.ok) throw new Error('Classification failed');
+
                 const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
                 displayResults(data);
             } catch (error) {
                 alert('Error: ' + error.message);
-                console.error('Classification error:', error);
             } finally {
                 document.getElementById('loading').classList.remove('show');
-                btn.disabled = false;
-                btn.textContent = '🎯 Classify Product';
             }
         }
-        
+
         function displayResults(data) {
             document.getElementById('results').classList.add('show');
-            
+
             document.getElementById('product').textContent = data.product;
             document.getElementById('catId').textContent = data.category_id;
             document.getElementById('finalProd').textContent = data.final_product;
             document.getElementById('path').textContent = data.category_path;
             document.getElementById('depth').textContent = data.depth;
             document.getElementById('time').textContent = data.processing_time_ms;
-            
+
             const conf = document.getElementById('confidence');
             conf.textContent = data.confidence;
-            const confLevel = data.confidence_level || data.confidence.split(' ')[0];
-            conf.className = 'tag conf-' + confLevel.toLowerCase();
-            
+            const confClass = data.confidence.split(' ')[0].toLowerCase().replace('_', '-');
+            conf.className = 'tag conf-' + confClass;
+
             const matchedHtml = data.matched_terms.map(t => `<span class="tag">${t}</span>`).join('');
-            document.getElementById('matchedTerms').innerHTML = matchedHtml || '<span class="tag">No variations found</span>';
-            
+            document.getElementById('matchedTerms').innerHTML = matchedHtml;
+
             let altHtml = '';
             data.top_5_results.forEach((item, i) => {
                 const cls = i === 0 ? 'style="background: #e8f5e9;"' : '';
@@ -1445,15 +1302,14 @@ HTML_TEMPLATE = """
                         <strong>${item.rank}.</strong> ${item.final_product} 
                         <span class="tag" style="background: #999;">${item.confidence}%</span>
                         <div style="font-size: 0.85em; color: #666; margin-top: 5px;">
-                            ID: ${item.category_id}<br>
-                            Path: ${item.category_path}
+                            ID: ${item.category_id}
                         </div>
                     </div>
                 `;
             });
             document.getElementById('alternatives').innerHTML = altHtml;
         }
-        
+
         document.getElementById('title').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') classify();
         });
@@ -1462,101 +1318,43 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# ============================================================================
+# FLASK APP
+# ============================================================================
 
-# ============================================================================
-# FLASK ROUTES
-# ============================================================================
+app = Flask(__name__)
+
 
 @app.route('/')
 def index():
-    """Serve the web interface"""
     return render_template_string(HTML_TEMPLATE)
 
 
 @app.route('/classify', methods=['POST'])
 def classify_route():
-    """API endpoint for classification"""
+    data = request.get_json(force=True)
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+
+    if not title:
+        return jsonify({'error': 'Title required'}), 400
+
     try:
-        data = request.json
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        title = data.get('title', '').strip()
-        description = data.get('description', '').strip()
-        
-        if not title:
-            return jsonify({'error': 'Title required'}), 400
-        
         result = classify_product(title, description)
-        
-        if 'error' in result:
-            return jsonify(result), 500
-        
         return jsonify(result)
-    
     except Exception as e:
-        print(f"Error during classification: {e}")
-        import traceback
-        traceback.print_exc()
+        app.logger.exception('Classification error')
         return jsonify({'error': str(e)}), 500
 
 
 @app.route('/health')
 def health():
-    """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
         'categories': len(metadata),
         'cross_store_synonyms': len(cross_store_synonyms),
-        'model': model_info.get('model_name', 'unknown'),
-        'embedding_dim': model_info.get('embedding_dim', 'unknown'),
-        'synonym_source': 'AI-generated' if len(cross_store_synonyms) > 50 else 'basic'
+        'model': MODEL_NAME
     })
-
-
-@app.route('/api/batch', methods=['POST'])
-def batch_classify():
-    """Batch classification endpoint"""
-    try:
-        data = request.json
-        
-        if not data or 'products' not in data:
-            return jsonify({'error': 'products array required'}), 400
-        
-        products = data.get('products', [])
-        
-        if not isinstance(products, list):
-            return jsonify({'error': 'products must be an array'}), 400
-        
-        if len(products) > 100:
-            return jsonify({'error': 'Maximum 100 products per batch'}), 400
-        
-        results = []
-        for product in products:
-            if isinstance(product, dict):
-                title = product.get('title', '').strip()
-                description = product.get('description', '').strip()
-            else:
-                title = str(product).strip()
-                description = ''
-            
-            if title:
-                result = classify_product(title, description, top_k=3)
-                results.append(result)
-            else:
-                results.append({'error': 'Empty title', 'product': ''})
-        
-        return jsonify({
-            'count': len(results),
-            'results': results
-        })
-    
-    except Exception as e:
-        print(f"Error during batch classification: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================
@@ -1566,23 +1364,14 @@ def batch_classify():
 if __name__ == '__main__':
     try:
         load_server()
-        
-        print("🌐 Server starting...")
-        print("   URL: http://localhost:5000")
-        print("   API: http://localhost:5000/classify (POST)")
-        print("   Batch: http://localhost:5000/api/batch (POST)")
-        print("   Health: http://localhost:5000/health")
-        print("\n📖 Example API usage:")
-        print("   curl -X POST http://localhost:5000/classify \\")
-        print('     -H "Content-Type: application/json" \\')
-        print('     -d \'{"title": "Strut Compressor Tool"}\'')
-        print("\n   Press CTRL+C to stop\n")
-        
-        app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
-        
-    except KeyboardInterrupt:
-        print("\n\n👋 Server stopped by user")
+        print('\n🌐 Server starting...')
+        print('   URL: http://localhost:5000')
+        print('   Press CTRL+C to stop\n')
+        # Recommended: run with a production server like gunicorn for production use
+        app.run(host='0.0.0.0', port=5000, debug=False)
+    except FileNotFoundError as e:
+        print(f"\n❌ ERROR: {e}")
+        print('\n💡 Solution: Run training first to create FAISS index and metadata')
     except Exception as e:
-        print(f"\n❌ ERROR: {e}\n")
-        import traceback
-        traceback.print_exc()
+        print(f"\n❌ UNEXPECTED ERROR: {e}\n")
+
