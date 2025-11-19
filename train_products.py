@@ -1,1039 +1,421 @@
-
-# """
-# 🎯 ENHANCED TRAINING SYSTEM - Optimized for High Confidence
-# ===========================================================
-# ✅ Better final product emphasis (10x weight on last word)
-# ✅ Improved synonym integration
-# ✅ Optimized for 85%+ confidence scores
-# ✅ Validates data quality before training
-
-# Usage:
-#     python train_enhanced.py data/category_id_path_only.csv
-#     python train_enhanced.py data/category_id_path_only.csv data/tags.json
-# """
-
-# import pandas as pd
-# import numpy as np
-# from sentence_transformers import SentenceTransformer
-# import faiss
-# import pickle
-# import json
-# from pathlib import Path
-# from tqdm import tqdm
-# import re
-# from collections import defaultdict
-# import warnings
-# import sys
-# warnings.filterwarnings('ignore')
-
-
-# class EnhancedTrainer:
-#     """Enhanced trainer with stronger final product emphasis"""
-    
-#     def __init__(self, cache_dir='cache'):
-#         self.cache_dir = Path(cache_dir)
-#         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
-#         print("\n" + "="*80)
-#         print("🎯 ENHANCED CATEGORY PREDICTION SYSTEM")
-#         print("="*80)
-#         print("✅ 10x emphasis on final product (last word)")
-#         print("✅ Optimized for 85%+ confidence")
-#         print("✅ AI-powered synonym loading")
-#         print("="*80 + "\n")
-        
-#         # Model (single powerful one for speed)
-#         self.model_name = 'sentence-transformers/all-mpnet-base-v2'
-#         self.encoder = None
-        
-#         # Data
-#         self.df = None
-#         self.embeddings = None
-#         self.auto_tags = {}
-        
-#         # Load AI-powered synonyms
-#         self.cross_store_synonyms = self._load_cross_store_synonyms()
-        
-#         # Other attributes
-#         self.path_depth = {}
-#         self.path_hierarchy = {}
-#         self.max_depth = 0
-    
-#     def _load_cross_store_synonyms(self):
-#         """Load AI-generated synonyms from synonym_manager.py"""
-#         synonyms_file = self.cache_dir / 'cross_store_synonyms.pkl'
-        
-#         if synonyms_file.exists():
-#             print("📥 Loading AI-generated synonyms...")
-#             try:
-#                 with open(synonyms_file, 'rb') as f:
-#                     synonyms = pickle.load(f)
-#                 print(f"✅ Loaded {len(synonyms):,} AI-generated synonym mappings\n")
-#                 return synonyms
-#             except Exception as e:
-#                 print(f"⚠️  Error loading AI synonyms: {e}")
-#                 print("   Falling back to basic synonyms...\n")
-#         else:
-#             print("⚠️  AI-generated synonyms not found")
-#             print("   💡 Generate with: python synonym_manager.py autobuild data/category_id_path_only.csv")
-#             print("   Using basic synonyms for now...\n")
-        
-#         return self._build_basic_synonyms()
-    
-#     def _build_basic_synonyms(self):
-#         """Basic fallback synonyms"""
-#         synonyms = {
-#             # Footwear
-#             'shoes': {'footwear', 'sneakers', 'boots'},
-#             'sneakers': {'shoes', 'trainers', 'athletic shoes', 'running shoes'},
-#             'boots': {'footwear', 'shoes'},
-#             'sandals': {'footwear', 'shoes', 'flip flops'},
-            
-#             # Clothing
-#             'pants': {'trousers', 'slacks', 'bottoms'},
-#             'shirt': {'top', 'blouse', 'tee'},
-#             'jacket': {'coat', 'outerwear'},
-#             'dress': {'frock', 'gown'},
-            
-#             # Electronics
-#             'tv': {'television', 'smart tv'},
-#             'phone': {'mobile', 'smartphone', 'cell phone'},
-#             'laptop': {'notebook', 'computer'},
-            
-#             # Appliances
-#             'washing machine': {'washer', 'laundry machine'},
-#             'refrigerator': {'fridge', 'cooler'},
-            
-#             # General
-#             'kids': {'children', 'childrens', 'youth'},
-#             'women': {'womens', 'ladies', 'female'},
-#             'men': {'mens', 'male', 'guys'},
-#         }
-        
-#         # Build bidirectional
-#         expanded = {}
-#         for term, syns in synonyms.items():
-#             expanded[term] = syns.copy()
-#             for syn in syns:
-#                 if syn not in expanded:
-#                     expanded[syn] = set()
-#                 expanded[syn].add(term)
-#                 expanded[syn].update(syns - {syn})
-        
-#         print(f"📚 Using {len(expanded)} basic synonym mappings\n")
-#         return expanded
-    
-#     def load_data(self, filepath):
-#         """Load and validate category data"""
-#         print("📂 Loading category data...")
-        
-#         filepath = Path(filepath)
-#         if not filepath.exists():
-#             raise FileNotFoundError(f"CSV file not found: {filepath}")
-        
-#         # Read CSV - only first 2 columns
-#         self.df = pd.read_csv(filepath, usecols=[0, 1], names=['category_id', 'category_path'], 
-#                              header=0, low_memory=False)
-        
-#         # Remove any NaN
-#         before = len(self.df)
-#         self.df = self.df.dropna()
-#         after = len(self.df)
-        
-#         if before != after:
-#             print(f"   Removed {before - after} rows with missing data")
-        
-#         print(f"✅ Loaded {len(self.df):,} valid categories")
-        
-#         # Validate paths
-#         sample_paths = self.df['category_path'].head(5).tolist()
-#         print(f"\n📝 Sample paths:")
-#         for path in sample_paths:
-#             print(f"   • {path}")
-#         print()
-        
-#         return True
-    
-#     def load_auto_tags(self, json_path):
-#         """Load auto-generated tags from JSON"""
-#         print("📂 Loading auto-generated tags...")
-        
-#         json_path = Path(json_path)
-#         if not json_path.exists():
-#             print(f"⚠️  Auto-tags file not found: {json_path}")
-#             print("   Continuing without auto-tags...\n")
-#             return False
-        
-#         try:
-#             with open(json_path, 'r', encoding='utf-8') as f:
-#                 self.auto_tags = json.load(f)
-            
-#             print(f"✅ Loaded tags for {len(self.auto_tags):,} categories\n")
-#             return True
-#         except Exception as e:
-#             print(f"⚠️  Error loading auto-tags: {e}")
-#             return False
-    
-#     def load_model(self):
-#         """Load sentence transformer"""
-#         print(f"🤖 Loading model: {self.model_name}")
-#         print("   (This may take a minute on first run...)\n")
-        
-#         self.encoder = SentenceTransformer(self.model_name)
-#         print("✅ Model loaded\n")
-    
-#     def clean_text(self, text):
-#         """Clean text"""
-#         if pd.isna(text):
-#             return ""
-#         text = str(text).lower()
-#         text = re.sub(r'[^\w\s-]', ' ', text)
-#         text = re.sub(r'\s+', ' ', text).strip()
-#         return text
-    
-#     def split_path(self, path):
-#         """Split path into levels"""
-#         if pd.isna(path):
-#             return []
-#         path = str(path).strip()
-#         levels = [l.strip() for l in path.split('/') if l.strip()]
-#         return levels
-    
-#     def extract_terms_with_synonyms(self, text):
-#         """Extract terms and expand with synonyms"""
-#         cleaned = self.clean_text(text)
-#         words = cleaned.split()
-        
-#         all_terms = set()
-#         all_terms.add(cleaned)
-        
-#         # Single words + synonyms
-#         for word in words:
-#             if len(word) > 2:
-#                 all_terms.add(word)
-#                 if word in self.cross_store_synonyms:
-#                     all_terms.update(list(self.cross_store_synonyms[word])[:5])
-        
-#         # 2-word phrases + synonyms
-#         for i in range(len(words) - 1):
-#             if len(words[i]) > 2 and len(words[i+1]) > 2:
-#                 phrase = f"{words[i]} {words[i+1]}"
-#                 all_terms.add(phrase)
-#                 if phrase in self.cross_store_synonyms:
-#                     all_terms.update(list(self.cross_store_synonyms[phrase])[:5])
-        
-#         return list(all_terms)
-    
-#     def analyze_paths(self):
-#         """Analyze all paths"""
-#         print("🔍 ANALYZING CATEGORY STRUCTURE")
-#         print("="*80)
-        
-#         for idx, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Analyzing"):
-#             cat_path = str(row['category_path'])
-#             levels = self.split_path(cat_path)
-            
-#             self.path_hierarchy[cat_path] = levels
-#             self.path_depth[cat_path] = len(levels)
-#             self.max_depth = max(self.max_depth, len(levels))
-        
-#         print(f"\n✅ Analysis complete!")
-#         print(f"   Max depth: {self.max_depth}")
-#         print(f"   Synonym terms: {len(self.cross_store_synonyms):,}")
-#         print("="*80 + "\n")
-    
-#     def build_enhanced_text(self, row):
-#         """Build training text with HEAVY emphasis on final product"""
-#         cat_path = str(row['category_path'])
-#         cat_id = str(row['category_id'])
-#         levels = self.path_hierarchy.get(cat_path, [])
-        
-#         if not levels:
-#             return "unknown"
-        
-#         components = []
-        
-#         # 1. FINAL PRODUCT - MASSIVE EMPHASIS (the most important!)
-#         final_product = levels[-1]
-#         final_product_clean = self.clean_text(final_product)
-        
-#         # Repeat final product 15x for maximum weight
-#         components.append(' '.join([final_product_clean] * 15))
-        
-#         # Add synonym variations of final product 5x
-#         final_product_terms = self.extract_terms_with_synonyms(final_product)
-#         components.append(' '.join(final_product_terms * 5))
-        
-#         # 2. Auto-tags (if available) - high weight
-#         auto_tags = self.auto_tags.get(cat_id, []) or self.auto_tags.get(cat_path, [])
-#         if auto_tags:
-#             components.append(' '.join(auto_tags[:30]))
-#             components.append(' '.join(auto_tags[:15]))
-        
-#         # 3. Parent level (second to last) - medium weight
-#         if len(levels) >= 2:
-#             parent = self.clean_text(levels[-2])
-#             components.append(' '.join([parent] * 3))
-            
-#             # Combine parent + final
-#             combined = f"{parent} {final_product_clean}"
-#             components.append(' '.join([combined] * 3))
-        
-#         # 4. Full hierarchy with emphasis on deeper levels
-#         for i, level in enumerate(levels):
-#             cleaned = self.clean_text(level)
-#             if i == len(levels) - 1:  # Last level (already heavily weighted above)
-#                 components.append(cleaned)
-#             elif i == len(levels) - 2:  # Parent (already added above)
-#                 components.append(cleaned)
-#             elif i == len(levels) - 3:  # Grandparent
-#                 components.append(' '.join([cleaned] * 2))
-#             else:  # Top levels
-#                 components.append(cleaned)
-        
-#         # 5. Synonym expansion for all levels
-#         for level in levels:
-#             terms = self.extract_terms_with_synonyms(level)
-#             components.append(' '.join(terms[:10]))
-        
-#         # 6. Full path for context
-#         components.append(cat_path.lower())
-        
-#         return ' '.join(components)
-    
-#     def prepare_texts(self):
-#         """Prepare all training texts"""
-#         print("📝 PREPARING ENHANCED TEXTS")
-#         print("="*80)
-        
-#         texts = []
-#         for idx, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Processing"):
-#             enhanced = self.build_enhanced_text(row)
-#             texts.append(enhanced)
-        
-#         print(f"\n✅ Prepared {len(texts):,} enhanced texts")
-        
-#         # Show sample
-#         if texts:
-#             print("\n📝 Sample enhanced text (first 200 chars):")
-#             print(f"   {texts[0][:200]}...")
-        
-#         print("="*80 + "\n")
-        
-#         return texts
-    
-#     def encode_texts(self, texts, batch_size=32):
-#         """Encode texts with single powerful model"""
-#         print("🔄 ENCODING TEXTS")
-#         print("="*80)
-        
-#         embeddings = self.encoder.encode(
-#             texts,
-#             batch_size=batch_size,
-#             show_progress_bar=True,
-#             convert_to_numpy=True,
-#             normalize_embeddings=True
-#         )
-        
-#         embeddings = np.array(embeddings, dtype='float32')
-        
-#         print(f"\n✅ Encoded to shape: {embeddings.shape}")
-#         print("="*80 + "\n")
-        
-#         return embeddings
-    
-#     def build_faiss_index(self):
-#         """Build FAISS index"""
-#         print("🔍 BUILDING FAISS INDEX")
-#         print("="*80)
-        
-#         dimension = self.embeddings.shape[1]
-        
-#         # Use Inner Product for cosine similarity (embeddings are normalized)
-#         index = faiss.IndexFlatIP(dimension)
-#         index.add(self.embeddings)
-        
-#         # Save index
-#         index_path = self.cache_dir / 'main_index.faiss'
-#         faiss.write_index(index, str(index_path))
-        
-#         print(f"✅ Built index with {index.ntotal:,} vectors")
-#         print(f"✅ Saved to: {index_path}")
-#         print("="*80 + "\n")
-    
-#     def save_all_data(self):
-#         """Save all training data"""
-#         print("💾 SAVING TRAINING DATA")
-#         print("="*80)
-        
-#         # Save embeddings
-#         emb_path = self.cache_dir / 'embeddings.npy'
-#         np.save(emb_path, self.embeddings)
-#         print(f"✅ Saved: {emb_path}")
-        
-#         # Save metadata
-#         metadata = []
-#         for idx, row in self.df.iterrows():
-#             cat_id = str(row['category_id'])
-#             cat_path = str(row['category_path'])
-            
-#             metadata.append({
-#                 'category_id': cat_id,
-#                 'category_path': cat_path,
-#                 'auto_tags': self.auto_tags.get(cat_id, []) or self.auto_tags.get(cat_path, []),
-#                 'depth': self.path_depth.get(cat_path, 0),
-#                 'levels': self.path_hierarchy.get(cat_path, [])
-#             })
-        
-#         meta_path = self.cache_dir / 'metadata.pkl'
-#         with open(meta_path, 'wb') as f:
-#             pickle.dump(metadata, f)
-#         print(f"✅ Saved: {meta_path} ({len(metadata):,} entries)")
-        
-#         # Save synonyms
-#         syn_path = self.cache_dir / 'cross_store_synonyms.pkl'
-#         with open(syn_path, 'wb') as f:
-#             pickle.dump(self.cross_store_synonyms, f)
-#         print(f"✅ Saved: {syn_path} ({len(self.cross_store_synonyms):,} terms)")
-        
-#         print("="*80 + "\n")
-    
-#     def train(self, csv_path, json_path=None):
-#         """Complete training pipeline"""
-#         print("\n" + "="*80)
-#         print("🚀 STARTING ENHANCED TRAINING")
-#         print("="*80 + "\n")
-        
-#         # Load data
-#         self.load_data(csv_path)
-        
-#         # Load auto-tags if provided
-#         if json_path:
-#             self.load_auto_tags(json_path)
-        
-#         # Analyze paths
-#         self.analyze_paths()
-        
-#         # Load model
-#         self.load_model()
-        
-#         # Prepare texts
-#         texts = self.prepare_texts()
-        
-#         # Encode
-#         self.embeddings = self.encode_texts(texts)
-        
-#         # Build FAISS index
-#         self.build_faiss_index()
-        
-#         # Save everything
-#         self.save_all_data()
-        
-#         # Summary
-#         print("\n" + "="*80)
-#         print("✅ TRAINING COMPLETE!")
-#         print("="*80)
-#         print(f"📊 Summary:")
-#         print(f"   Categories trained: {len(self.df):,}")
-#         print(f"   Max hierarchy depth: {self.max_depth}")
-#         print(f"   Synonym terms: {len(self.cross_store_synonyms):,}")
-#         print(f"   Auto-tags loaded: {'Yes' if self.auto_tags else 'No'}")
-#         print(f"   Embedding dimension: {self.embeddings.shape[1]}")
-#         print(f"\n🎯 Optimizations:")
-#         print(f"   ✅ 15x emphasis on final product")
-#         print(f"   ✅ 5x synonym expansion")
-#         print(f"   ✅ Cross-store intelligence")
-#         print(f"   ✅ Optimized for 85%+ confidence")
-#         print(f"\n📁 Saved files:")
-#         print(f"   {self.cache_dir}/main_index.faiss")
-#         print(f"   {self.cache_dir}/metadata.pkl")
-#         print(f"   {self.cache_dir}/embeddings.npy")
-#         print(f"   {self.cache_dir}/cross_store_synonyms.pkl")
-#         print("="*80 + "\n")
-        
-#         print("🚀 Next: Start API server")
-#         print("   python api_server.py\n")
-
-
-# def main():
-#     """Main entry point"""
-#     if len(sys.argv) < 2:
-#         print("\n❌ Error: CSV file path required")
-#         print("\nUsage:")
-#         print("   python train_enhanced.py <csv_path> [json_path]")
-#         print("\nExamples:")
-#         print("   python train_enhanced.py data/category_id_path_only.csv")
-#         print("   python train_enhanced.py data/category_id_path_only.csv data/tags.json")
-#         sys.exit(1)
-    
-#     csv_path = sys.argv[1]
-#     json_path = sys.argv[2] if len(sys.argv) > 2 else None
-    
-#     if not Path(csv_path).exists():
-#         print(f"\n❌ Error: CSV file not found: {csv_path}")
-#         sys.exit(1)
-    
-#     trainer = EnhancedTrainer()
-#     trainer.train(csv_path, json_path)
-
-
-# if __name__ == "__main__":
-#     main()
-
-
-
-
-
-
+#!/usr/bin/env python3
 """
-🎯 FIXED TRAINING SYSTEM (Windows + NVIDIA GPU)
-================================================
-✅ Uses e5-base-v2 (lower memory, 768D)
-✅ Windows + NVIDIA GPU optimized
-✅ Proper error handling
-✅ 15x emphasis on final product
+train.py
+Build normalized embeddings + FAISS index for category catalog,
+build parent embeddings, save synonyms from tags.json and optionally
+train a LightGBM classifier and a simple confidence calibrator.
 
-Usage:
-    python train_fixed.py data/category_id_path_only.csv
-    python train_fixed.py data/category_id_path_only.csv data/tags.json
+Assumptions / Files:
+- categories CSV: category_only_path.csv (Category_ID,Category_path,Final_Category)
+- optional: data/tags.json  (map category_id -> list of phrases)
+- optional: validation.csv (columns: product_title,category_id) used for calibrator / classifier
+
+Outputs to ./cache:
+- main_index.faiss
+- metadata.pkl
+- parent_embeddings.pkl
+- cross_store_synonyms.pkl
+- model_info.json
+- calibrator.pkl (if validation exists)
+- classifier.pkl (if --train-classifier used)
 """
 
-import pandas as pd
+import argparse
+import json
+import os
+import pickle
+from pathlib import Path
+from typing import List, Dict
+
 import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+# sentence-transformers + faiss
 from sentence_transformers import SentenceTransformer
 import faiss
-import pickle
-import json
-from pathlib import Path
-from tqdm import tqdm
-import re
-from collections import defaultdict
-import warnings
-import sys
-import os
 
-warnings.filterwarnings('ignore')
+# sklearn for calibrator and simple preprocessing
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-# Fix Windows CUDA issues
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-
+# optional LightGBM (install if you plan to train classifier)
 try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
-    print("⚠️  PyTorch not available")
+    import importlib
+    lgb = importlib.import_module("lightgbm")
+    LGB_AVAILABLE = True
+except Exception:
+    lgb = None
+    LGB_AVAILABLE = False
+
+CACHE_DIR = Path("cache")
+CACHE_DIR.mkdir(exist_ok=True, parents=True)
+
+DEFAULT_BATCH_SIZE_CPU = 256
+DEFAULT_BATCH_SIZE_GPU = 16
 
 
-class FixedTrainer:
-    """Fixed trainer for Windows + NVIDIA GPU"""
-    
-    def __init__(self, cache_dir='cache'):
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        print("\n" + "="*80)
-        print("🎯 CATEGORY PREDICTION TRAINING (Windows + NVIDIA GPU)")
-        print("="*80)
-        print("✅ E5-Base-v2 (768D, memory-efficient)")
-        print("✅ Proper E5 formatting (passage: prefix)")
-        print("✅ 15x emphasis on final product")
-        print("✅ NVIDIA GPU acceleration")
-        print("="*80 + "\n")
-        
-        # Use e5-base-v2 for better memory efficiency
-        self.model_name = 'intfloat/e5-base-v2'
-        self.encoder = None
-        self.device = "cpu"
-        
-        # Data
-        self.df = None
-        self.embeddings = None
-        self.auto_tags = {}
-        
-        # Load synonyms
-        self.cross_store_synonyms = self._load_cross_store_synonyms()
-        
-        # Analysis
-        self.path_depth = {}
-        self.path_hierarchy = {}
-        self.max_depth = 0
-    
-    def _load_cross_store_synonyms(self):
-        """Load AI-generated synonyms"""
-        synonyms_file = self.cache_dir / 'cross_store_synonyms.pkl'
-        
-        if synonyms_file.exists():
-            print("📥 Loading AI-generated synonyms...")
-            try:
-                with open(synonyms_file, 'rb') as f:
-                    synonyms = pickle.load(f)
-                
-                # Handle different formats
-                if synonyms and list(synonyms.values()):
-                    first_val = next(iter(synonyms.values()))
-                    
-                    if isinstance(first_val, list) and first_val:
-                        if isinstance(first_val[0], tuple):
-                            # New format: extract just the synonym words
-                            cleaned = {}
-                            for term, syn_list in synonyms.items():
-                                cleaned[term] = {syn for syn, conf, src in syn_list}
-                            synonyms = cleaned
-                        elif isinstance(first_val[0], str):
-                            # Already good
-                            pass
-                    elif isinstance(first_val, set):
-                        # Already good
-                        pass
-                
-                print(f"✅ Loaded {len(synonyms):,} synonym mappings\n")
-                return synonyms
-            except Exception as e:
-                print(f"⚠️  Error loading synonyms: {e}\n")
-        
-        return self._build_basic_synonyms()
-    
-    def _build_basic_synonyms(self):
-        """Basic synonyms as fallback"""
-        synonyms = {
-            # Footwear
-            'shoes': {'footwear', 'sneakers', 'boots'},
-            'sneakers': {'shoes', 'trainers', 'athletic shoes'},
-            'boots': {'footwear', 'shoes'},
-            
-            # Clothing
-            'pants': {'trousers', 'slacks', 'bottoms', 'jeans'},
-            'shirt': {'top', 'blouse', 'tee', 't-shirt'},
-            'jacket': {'coat', 'outerwear', 'blazer'},
-            
-            # Electronics
-            'tv': {'television', 'smart tv'},
-            'phone': {'mobile', 'smartphone', 'cell phone'},
-            'laptop': {'notebook', 'computer'},
-            'headphones': {'earphones', 'headset', 'earbuds'},
-            
-            # Appliances
-            'washing machine': {'washer', 'laundry machine'},
-            'refrigerator': {'fridge', 'cooler'},
-            'microwave': {'microwave oven'},
-            
-            # General
-            'kids': {'children', 'childrens', 'youth', 'junior'},
-            'women': {'womens', 'ladies', 'female'},
-            'men': {'mens', 'male', 'gents'},
-        }
-        
-        print(f"📚 Using {len(synonyms)} basic synonyms\n")
-        return synonyms
-    
-    def load_data(self, filepath):
-        """Load category data"""
-        print("📂 Loading category data...")
-        
-        filepath = Path(filepath)
-        if not filepath.exists():
-            raise FileNotFoundError(f"CSV not found: {filepath}")
-        
+def normalize_path_sep(path: str) -> str:
+    if not isinstance(path, str):
+        return ""
+    s = path.strip()
+    s = s.replace("/", " > ")
+    s = " > ".join([p.strip() for p in s.split(">") if p.strip()])
+    return s
+
+
+def path_to_levels(path: str) -> List[str]:
+    n = normalize_path_sep(path)
+    return [p.strip() for p in n.split(" > ") if p.strip()]
+
+
+def safe_pickle_save(obj, p: Path):
+    with open(p, "wb") as f:
+        pickle.dump(obj, f)
+
+
+def build_encoder(model_name: str, use_cuda: bool):
+    device = "cuda" if use_cuda else "cpu"
+    print(f"Loading encoder: {model_name} on {device}")
+    model = SentenceTransformer(model_name, device=device)
+    if use_cuda:
         try:
-            # Read CSV - handle with/without header
-            self.df = pd.read_csv(filepath, dtype=str)
-            
-            # Rename columns if needed
-            if len(self.df.columns) >= 2:
-                self.df.columns = ['category_id', 'category_path'] + list(self.df.columns[2:])
-            else:
-                raise ValueError("CSV must have at least 2 columns")
-            
-            # Clean data
-            before = len(self.df)
-            self.df = self.df.dropna(subset=['category_path'])
-            self.df.drop_duplicates(subset=['category_path'], inplace=True)
-            after = len(self.df)
-            
-            if before != after:
-                print(f"   Cleaned: {before - after} rows removed")
-            
-            print(f"✅ Loaded {len(self.df):,} unique categories")
-            
-            # Show samples
-            print(f"\n📝 Sample paths:")
-            for path in self.df['category_path'].head(3):
-                print(f"   • {path}")
-            print()
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error loading CSV: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def load_auto_tags(self, json_path):
-        """Load auto-tags (optional)"""
-        print("📂 Loading auto-tags...")
-        
-        json_path = Path(json_path)
-        if not json_path.exists():
-            print(f"ℹ️  Not found, continuing without tags\n")
-            return False
-        
+            import torch
+            model = model.half()
+            print("Using FP16 on GPU to conserve VRAM.")
+        except Exception:
+            pass
+    return model
+
+
+def encode_texts(model: SentenceTransformer, texts: List[str], use_cuda: bool) -> np.ndarray:
+    batch_size = DEFAULT_BATCH_SIZE_GPU if use_cuda else DEFAULT_BATCH_SIZE_CPU
+    print(f"Encoding {len(texts):,} texts in batches of {batch_size} ...")
+    all_emb = []
+    for i in tqdm(range(0, len(texts), batch_size)):
+        batch = texts[i:i + batch_size]
+        emb = model.encode(batch, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
+        if emb.ndim == 1:
+            emb = emb.reshape(1, -1)
+        all_emb.append(emb.astype("float32"))
+    embeddings = np.vstack(all_emb)
+    print("Final embeddings shape:", embeddings.shape)
+    return embeddings
+
+
+def build_faiss_index(np_emb: np.ndarray, use_gpu: bool = False):
+    d = np_emb.shape[1]
+    print(f"Building IndexFlatIP (d={d}) on {'GPU' if use_gpu else 'CPU'}")
+    index = faiss.IndexFlatIP(d)
+    if use_gpu:
         try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                self.auto_tags = json.load(f)
-            print(f"✅ Loaded tags for {len(self.auto_tags):,} categories\n")
-            return True
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, index)
+            print("Converted FAISS index to GPU")
         except Exception as e:
-            print(f"⚠️  Error: {e}\n")
-            return False
-    
-    def load_model(self):
-        """Load e5-base-v2 model with GPU support"""
-        print(f"🤖 Loading {self.model_name}...")
-        
-        # Check GPU
-        if TORCH_AVAILABLE:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            
-            if self.device == "cuda":
-                print(f"🔥 NVIDIA GPU detected!")
-                try:
-                    gpu_name = torch.cuda.get_device_name(0)
-                    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                    print(f"   GPU: {gpu_name}")
-                    print(f"   VRAM: {vram_gb:.1f} GB")
-                except:
-                    pass
-        else:
-            self.device = "cpu"
-        
-        print(f"   Device: {self.device.upper()}")
-        print(f"   (First run downloads ~500 MB)\n")
-        
-        try:
-            self.encoder = SentenceTransformer(self.model_name, device=self.device)
-            
-            # Use FP16 on GPU
-            if self.device == "cuda":
-                self.encoder = self.encoder.half()
-                print("⚡ Enabled FP16 precision for faster training\n")
-            
-            print("✅ Model loaded\n")
-            return True
-        except Exception as e:
-            print(f"❌ Failed to load model: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-    
-    def clean_text(self, text):
-        """Clean text"""
-        if pd.isna(text):
-            return ""
-        text = str(text).lower()
-        text = re.sub(r'[^\w\s-]', ' ', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-    
-    def split_path(self, path):
-        """Split category path"""
-        if pd.isna(path):
-            return []
-        path = str(path).strip()
-        levels = [l.strip() for l in path.split('/') if l.strip()]
-        return levels
-    
-    def extract_terms_with_synonyms(self, text):
-        """Extract terms + synonyms"""
-        cleaned = self.clean_text(text)
-        words = cleaned.split()
-        
-        all_terms = set()
-        all_terms.add(cleaned)
-        
-        # Single words + synonyms
-        for word in words:
-            if len(word) > 2:
-                all_terms.add(word)
-                if word in self.cross_store_synonyms:
-                    if isinstance(self.cross_store_synonyms[word], (list, set)):
-                        syns = list(self.cross_store_synonyms[word])[:5]
-                        all_terms.update(syns)
-        
-        # 2-word phrases + synonyms
-        for i in range(len(words) - 1):
-            if len(words[i]) > 2 and len(words[i+1]) > 2:
-                phrase = f"{words[i]} {words[i+1]}"
-                all_terms.add(phrase)
-                if phrase in self.cross_store_synonyms:
-                    if isinstance(self.cross_store_synonyms[phrase], (list, set)):
-                        syns = list(self.cross_store_synonyms[phrase])[:5]
-                        all_terms.update(syns)
-        
-        return list(all_terms)
-    
-    def analyze_paths(self):
-        """Analyze category structure"""
-        print("🔍 ANALYZING CATEGORY STRUCTURE")
-        print("="*80)
-        
-        for idx, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Analyzing"):
-            cat_path = str(row['category_path'])
-            levels = self.split_path(cat_path)
-            
-            self.path_hierarchy[cat_path] = levels
-            self.path_depth[cat_path] = len(levels)
-            self.max_depth = max(self.max_depth, len(levels))
-        
-        print(f"\n✅ Analysis complete")
-        print(f"   Max depth: {self.max_depth}")
-        print(f"   Synonyms: {len(self.cross_store_synonyms):,}")
-        print("="*80 + "\n")
-    
-    def build_enhanced_text(self, row):
-        """Build E5-optimized training text"""
-        cat_path = str(row['category_path'])
-        cat_id = str(row['category_id'])
-        levels = self.path_hierarchy.get(cat_path, [])
-        
-        if not levels:
-            return "passage: unknown"
-        
-        components = []
-        
-        # CRITICAL: E5 requires "passage:" prefix
-        components.append("passage:")
-        
-        # 1. FINAL PRODUCT - MAXIMUM EMPHASIS (15x)
-        final_product = levels[-1]
-        final_clean = self.clean_text(final_product)
-        components.append(' '.join([final_clean] * 15))
-        
-        # 2. Synonym variations (5x)
-        terms = self.extract_terms_with_synonyms(final_product)
-        components.append(' '.join(terms * 5))
-        
-        # 3. Auto-tags (if available)
-        auto_tags = self.auto_tags.get(cat_id, []) or self.auto_tags.get(cat_path, [])
-        if auto_tags:
-            if isinstance(auto_tags, list):
-                components.append(' '.join(auto_tags[:30]))
-        
-        # 4. Parent level (3x)
-        if len(levels) >= 2:
-            parent = self.clean_text(levels[-2])
-            components.append(' '.join([parent] * 3))
-            
-            # Parent + final combined
-            combined = f"{parent} {final_clean}"
-            components.append(' '.join([combined] * 3))
-        
-        # 5. Full hierarchy (weighted)
-        for i, level in enumerate(levels):
-            cleaned = self.clean_text(level)
-            if i == len(levels) - 1:  # Last
-                components.append(cleaned)
-            elif i == len(levels) - 2:  # Parent
-                components.append(cleaned)
-            elif i == len(levels) - 3:  # Grandparent
-                components.append(' '.join([cleaned] * 2))
-            else:  # Top levels
-                components.append(cleaned)
-        
-        # 6. Synonym expansion for all levels
-        for level in levels:
-            terms = self.extract_terms_with_synonyms(level)
-            components.append(' '.join(terms[:10]))
-        
-        # 7. Full path
-        components.append(cat_path.lower())
-        
-        return ' '.join(components)
-    
-    def prepare_texts(self):
-        """Prepare training texts"""
-        print("📝 PREPARING E5-OPTIMIZED TEXTS")
-        print("="*80)
-        
-        texts = []
-        for idx, row in tqdm(self.df.iterrows(), total=len(self.df), desc="Processing"):
-            enhanced = self.build_enhanced_text(row)
-            texts.append(enhanced)
-        
-        print(f"\n✅ Prepared {len(texts):,} texts")
-        
-        # Show sample
-        if texts:
-            print(f"\n📝 Sample (first 200 chars):")
-            print(f"   {texts[0][:200]}...")
-        
-        print("="*80 + "\n")
-        
-        return texts
-    
-    def encode_texts(self, texts, batch_size=32):
-        """Encode with E5"""
-        print("🔄 ENCODING WITH E5-BASE")
-        print("="*80)
-        
-        # Adjust batch size for GPU
-        if self.device == "cuda":
-            batch_size = 64
-        else:
-            batch_size = 16
-        
-        print(f"   Batch size: {batch_size}")
-        
-        embeddings = self.encoder.encode(
-            texts,
-            batch_size=batch_size,
-            show_progress_bar=True,
-            convert_to_numpy=True,
-            normalize_embeddings=True
-        )
-        
-        embeddings = np.array(embeddings, dtype='float32')
-        
-        print(f"\n✅ Encoded shape: {embeddings.shape}")
-        print(f"   Dimension: {embeddings.shape[1]} (E5-Base)")
-        print("="*80 + "\n")
-        
-        return embeddings
-    
-    def build_faiss_index(self):
-        """Build FAISS index"""
-        print("🔍 BUILDING FAISS INDEX")
-        print("="*80)
-        
-        dimension = self.embeddings.shape[1]
-        
-        # Inner Product for normalized embeddings (faster than cosine)
-        index = faiss.IndexFlatIP(dimension)
-        index.add(self.embeddings)
-        
-        index_path = self.cache_dir / 'main_index.faiss'
-        faiss.write_index(index, str(index_path))
-        
-        print(f"✅ Built index: {index.ntotal:,} vectors")
-        print(f"✅ Saved: {index_path}")
-        print("="*80 + "\n")
-    
-    def save_all_data(self):
-        """Save training data"""
-        print("💾 SAVING TRAINING DATA")
-        print("="*80)
-        
-        # Embeddings
-        emb_path = self.cache_dir / 'embeddings.npy'
-        np.save(emb_path, self.embeddings)
-        print(f"✅ {emb_path}")
-        
-        # Metadata
-        metadata = []
-        for idx, row in self.df.iterrows():
-            metadata.append({
-                'category_id': str(row['category_id']),
-                'category_path': str(row['category_path']),
-                'auto_tags': self.auto_tags.get(str(row['category_id']), []),
-                'depth': self.path_depth.get(str(row['category_path']), 0),
-                'levels': self.path_hierarchy.get(str(row['category_path']), [])
-            })
-        
-        meta_path = self.cache_dir / 'metadata.pkl'
-        with open(meta_path, 'wb') as f:
-            pickle.dump(metadata, f)
-        print(f"✅ {meta_path} ({len(metadata):,} entries)")
-        
-        # Model info
-        model_info = {
-            'model_name': self.model_name,
-            'embedding_dim': self.embeddings.shape[1],
-            'num_categories': len(self.df),
-            'max_depth': self.max_depth,
-            'has_auto_tags': bool(self.auto_tags),
-            'device': self.device
-        }
-        
-        info_path = self.cache_dir / 'model_info.json'
-        with open(info_path, 'w') as f:
-            json.dump(model_info, f, indent=2)
-        print(f"✅ {info_path}")
-        
-        print("="*80 + "\n")
-    
-    def train(self, csv_path, json_path=None):
-        """Complete training pipeline"""
-        print("\n" + "="*80)
-        print("🚀 STARTING TRAINING")
-        print("="*80 + "\n")
-        
-        # Load data
-        if not self.load_data(csv_path):
-            return False
-        
-        if json_path:
-            self.load_auto_tags(json_path)
-        
-        # Analyze
-        self.analyze_paths()
-        
-        # Load model
-        if not self.load_model():
-            return False
-        
-        # Prepare and encode
-        texts = self.prepare_texts()
-        self.embeddings = self.encode_texts(texts)
-        
-        # Build index
-        self.build_faiss_index()
-        
-        # Save
-        self.save_all_data()
-        
-        # Summary
-        print("\n" + "="*80)
-        print("✅ TRAINING COMPLETE!")
-        print("="*80)
-        print(f"\n📊 Summary:")
-        print(f"   Model: {self.model_name}")
-        print(f"   Device: {self.device.upper()}")
-        print(f"   Categories: {len(self.df):,}")
-        print(f"   Max depth: {self.max_depth}")
-        print(f"   Embedding dim: {self.embeddings.shape[1]}")
-        print(f"   Synonyms: {len(self.cross_store_synonyms):,}")
-        print(f"\n📁 Output:")
-        print(f"   {self.cache_dir}/main_index.faiss")
-        print(f"   {self.cache_dir}/metadata.pkl")
-        print(f"   {self.cache_dir}/embeddings.npy")
-        print("="*80 + "\n")
-        
-        return True
+            print("GPU conversion failed; using CPU index:", e)
+    index.add(np_emb)
+    print("Index ntotal:", index.ntotal)
+    return index
+
+
+def make_parent_embeddings(metadata: List[Dict], embeddings: np.ndarray) -> Dict[str, np.ndarray]:
+    """
+    For each possible parent path (every prefix), average embeddings of its children.
+    This helps hierarchical boosting during inference.
+    """
+    parent_map = {}
+    count_map = {}
+    for i, meta in enumerate(metadata):
+        levels = meta.get("levels", [])
+        for depth in range(1, len(levels)):
+            parent = " > ".join(levels[:depth])
+            if not parent:
+                continue
+            parent_map.setdefault(parent, np.zeros(embeddings.shape[1], dtype="float32"))
+            count_map.setdefault(parent, 0)
+            parent_map[parent] += embeddings[i]
+            count_map[parent] += 1
+
+    # average + normalize
+    from numpy.linalg import norm
+    final = {}
+    for k, vec in parent_map.items():
+        cnt = count_map.get(k, 1)
+        avg = vec / float(cnt)
+        nrm = np.linalg.norm(avg) + 1e-12
+        final[k] = (avg / nrm).astype("float32")
+    return final
+
+
+def load_tags_json(path: Path) -> Dict[str, List[str]]:
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # ensure keys are strings
+        return {str(k): [str(x) for x in v] for k, v in data.items()}
+    except Exception as e:
+        print("Failed to load tags.json:", e)
+        return {}
+
+
+def train_calibrator(encoder, metadata, faiss_index, val_path: Path, model_name: str, use_cuda: bool):
+    """
+    Build a simple calibrator mapping raw cosine similarity of (product -> true category emb)
+    to a probability. Uses sklearn LogisticRegression on one feature (raw_score).
+    Expects validation.csv with columns product_title,category_id
+    """
+    print("Training calibrator using:", val_path)
+    df = pd.read_csv(val_path, dtype=str, keep_default_na=False)
+    if "product_title" not in df.columns or "category_id" not in df.columns:
+        print("validation.csv must have 'product_title' and 'category_id' columns. Skipping calibrator.")
+        return None
+
+    examples = []
+    labels = []
+    # Build a mapping category_id -> embedding (from metadata)
+    id_to_idx = {m["category_id"]: i for i, m in enumerate(metadata)}
+
+    # prepare product embeddings in batches
+    titles = df["product_title"].astype(str).tolist()
+    prod_embs = encode_texts(encoder, [f"query: {t}" for t in titles], use_cuda=use_cuda)
+
+    for i, row in df.iterrows():
+        cid = str(row["category_id"]).strip()
+        if cid not in id_to_idx:
+            # not in catalog, skip sample
+            continue
+        cat_idx = id_to_idx[cid]
+        cat_emb = metadata[cat_idx].get("_embedding")  # we will attach embeddings later temporarily
+        if cat_emb is None:
+            continue
+        q_emb = prod_embs[i].reshape(1, -1).astype("float32")
+        raw = float(np.dot(q_emb, cat_emb.reshape(-1, 1))[0][0])  # cosine because normalized
+        # positive
+        examples.append([raw])
+        labels.append(1)
+
+        # generate few negatives by sampling other categories
+        # sample up to 2 random negatives
+        negs = 2
+        for _ in range(negs):
+            import random
+            rand_idx = random.randrange(len(metadata))
+            if rand_idx == cat_idx:
+                continue
+            neg_emb = metadata[rand_idx].get("_embedding")
+            if neg_emb is None:
+                continue
+            raw_neg = float(np.dot(q_emb, neg_emb.reshape(-1, 1))[0][0])
+            examples.append([raw_neg])
+            labels.append(0)
+
+    if not examples:
+        print("No examples for calibrator (maybe category ids mismatch). Skipping.")
+        return None
+
+    X = np.array(examples, dtype="float32")
+    y = np.array(labels, dtype="int8")
+    scaler = StandardScaler()
+    Xs = scaler.fit_transform(X)
+    clf = LogisticRegression(max_iter=200)
+    clf.fit(Xs, y)
+    print("Calibrator trained (logistic regression on raw cosine).")
+    return {"calibrator": clf, "scaler": scaler}
+
+
+def attach_embeddings_to_metadata(metadata: List[Dict], embeddings: np.ndarray):
+    for i, m in enumerate(metadata):
+        m["_embedding"] = embeddings[i]
+
+
+def detach_embeddings_from_metadata(metadata: List[Dict]):
+    for m in metadata:
+        if "_embedding" in m:
+            del m["_embedding"]
 
 
 def main():
-    """Main entry point"""
-    if len(sys.argv) < 2:
-        print("\n❌ CSV path required")
-        print("\nUsage:")
-        print("   python train_fixed.py data/category_id_path_only.csv")
-        print("   python train_fixed.py data/category_id_path_only.csv data/tags.json")
-        sys.exit(1)
-    
-    csv_path = sys.argv[1]
-    json_path = sys.argv[2] if len(sys.argv) > 2 else None
-    
-    if not Path(csv_path).exists():
-        print(f"\n❌ File not found: {csv_path}")
-        sys.exit(1)
-    
-    trainer = FixedTrainer()
-    success = trainer.train(csv_path, json_path)
-    
-    if not success:
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", required=True, help="categories CSV (Category_ID,Category_path,Final_Category)")
+    parser.add_argument("--model", default="intfloat/e5-base-v2", help="embedding model")
+    parser.add_argument("--gpu", action="store_true", help="use GPU for encoding if available (careful with 4GB)")
+    parser.add_argument("--clean-cache", action="store_true", help="delete other cache files after build")
+    parser.add_argument("--train-classifier", action="store_true", help="train LightGBM classifier on validation.csv (optional)")
+    parser.add_argument("--validation", default="data/validation.csv", help="validation CSV used for calibrator / classifier")
+    parser.add_argument("--tags", default="data/tags.json", help="tags.json path (optional)")
+    args = parser.parse_args()
 
+    csv_path = Path(args.csv)
+    if not csv_path.exists():
+        raise SystemExit("CSV not found: " + str(csv_path))
+
+    print("Reading CSV:", csv_path)
+    df = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+    if df.shape[1] < 2:
+        raise SystemExit("CSV must have at least 2 columns: Category_ID, Category_path")
+
+    # columns
+    cols = list(df.columns)
+    cid_col, path_col = cols[0], cols[1]
+    print("Using columns:", cid_col, path_col)
+
+    metadata = []
+    texts_for_encoding = []
+    for idx, row in df.iterrows():
+        cid = str(row[cid_col]).strip()
+        raw_path = str(row[path_col]).strip()
+        norm_path = normalize_path_sep(raw_path)
+        levels = path_to_levels(norm_path)
+        final = levels[-1] if levels else norm_path or cid
+        # include both path and final in canonical text to encode
+        text = f"category: {norm_path}. leaf: {final}."
+        metadata.append({
+            "category_id": cid,
+            "category_path": norm_path,
+            "final": final,
+            "levels": levels,
+            "depth": len(levels)
+        })
+        texts_for_encoding.append(text)
+
+    print(f"Prepared {len(metadata):,} metadata entries")
+
+    # encoder
+    use_cuda = args.gpu
+    encoder = build_encoder(args.model, use_cuda=use_cuda)
+
+    # encode categories
+    cat_embeddings = encode_texts(encoder, texts_for_encoding, use_cuda=use_cuda)
+
+    # Attach embeddings temporarily for calibrator builder
+    attach_embeddings_to_metadata(metadata, cat_embeddings)
+
+    # parent embeddings
+    parent_emb = make_parent_embeddings(metadata, cat_embeddings)
+    print(f"Built {len(parent_emb):,} parent embeddings")
+
+    # Build CPU FAISS index (IP on normalized vectors -> cosine)
+    index = build_faiss_index(cat_embeddings, use_gpu=False)
+
+    # save index (FAISS CPU index)
+    faiss_path = CACHE_DIR / "main_index.faiss"
+    faiss.write_index(index, str(faiss_path))
+    print("Saved FAISS index:", faiss_path)
+
+    # save metadata (we will strip embeddings before saving to reduce pickle size)
+    detach_embeddings_from_metadata(metadata)
+    meta_path = CACHE_DIR / "metadata.pkl"
+    safe_pickle_save(metadata, meta_path)
+    print("Saved metadata:", meta_path)
+
+    # save parent embeddings
+    parent_path = CACHE_DIR / "parent_embeddings.pkl"
+    safe_pickle_save(parent_emb, parent_path)
+    print("Saved parent embeddings:", parent_path)
+
+    # save model_info
+    info = {
+        "model_name": args.model,
+        "num_categories": len(metadata),
+        "embedding_dim": cat_embeddings.shape[1]
+    }
+    with open(CACHE_DIR / "model_info.json", "w", encoding="utf-8") as f:
+        json.dump(info, f, indent=2)
+    print("Saved model_info.json")
+
+    # store tags.json -> cross_store_synonyms (just preserve structure)
+    tags = load_tags_json(Path(args.tags))
+    if tags:
+        syn_p = CACHE_DIR / "cross_store_synonyms.pkl"
+        safe_pickle_save(tags, syn_p)
+        print("Saved cross_store_synonyms.pkl from tags.json (size: %d)" % len(tags))
+
+    # calibrator: use validation.csv if exists
+    val_path = Path(args.validation)
+    calibrator_obj = None
+    if val_path.exists():
+        # we need embeddings attached again for calibrator training
+        attach_embeddings_to_metadata(metadata, cat_embeddings)
+        calibrator_obj = train_calibrator(encoder, metadata, index, val_path, args.model, use_cuda=use_cuda)
+        detach_embeddings_from_metadata(metadata)
+        if calibrator_obj:
+            safe_pickle_save(calibrator_obj, CACHE_DIR / "calibrator.pkl")
+            print("Saved calibrator.pkl")
+
+    # optional LightGBM classifier
+    if args.train_classifier:
+        if not LGB_AVAILABLE:
+            print("LightGBM not available. Install lightgbm to train classifier.")
+        else:
+            val_path2 = Path(args.validation)
+            if not val_path2.exists():
+                print("validation.csv required to train classifier. Skipping classifier training.")
+            else:
+                # create training set from validation.csv
+                dfv = pd.read_csv(val_path2, dtype=str, keep_default_na=False)
+                if "product_title" not in dfv.columns or "category_id" not in dfv.columns:
+                    print("validation.csv must contain product_title and category_id. Skipping classifier.")
+                else:
+                    # encode product titles
+                    prod_texts = [f"query: {t}" for t in dfv["product_title"].astype(str).tolist()]
+                    prod_embs = encode_texts(encoder, prod_texts, use_cuda=use_cuda)
+                    # map category ids to numeric labels
+                    cat_to_label = {m["category_id"]: i for i, m in enumerate(metadata)}
+                    labels = []
+                    rows = []
+                    for i, row in dfv.iterrows():
+                        cid = row["category_id"]
+                        if cid not in cat_to_label:
+                            continue
+                        labels.append(cat_to_label[cid])
+                        rows.append(prod_embs[i])
+                    if len(rows) < 50:
+                        print("Not enough training rows for classifier. Need >=50. Skipping.")
+                    else:
+                        X = np.vstack(rows)
+                        y = np.array(labels, dtype=np.int32)
+                        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
+                        lgb_train = lgb.Dataset(X_train, label=y_train)
+                        lgb_eval = lgb.Dataset(X_val, label=y_val, reference=lgb_train)
+                        params = {
+                            "objective": "multiclass",
+                            "num_class": int(max(y) + 1),
+                            "metric": "multi_logloss",
+                            "verbosity": -1,
+                            "num_threads": 4,
+                            "learning_rate": 0.1,
+                            "num_leaves": 31
+                        }
+                        print("Training LightGBM classifier (may take time)...")
+                        gbm = lgb.train(params, lgb_train, valid_sets=[lgb_train, lgb_eval], early_stopping_rounds=30, num_boost_round=500)
+                        # save classifier and mapping
+                        clf_path = CACHE_DIR / "classifier.pkl"
+                        safe_pickle_save({"model": gbm, "cat_to_label": cat_to_label, "label_to_cat": {v: k for k, v in cat_to_label.items()}}, clf_path)
+                        print("Saved classifier.pkl")
+
+    # cleanup if asked
+    if args.clean_cache:
+        keep = {"main_index.faiss", "metadata.pkl", "model_info.json", "parent_embeddings.pkl", "cross_store_synonyms.pkl"}
+        if calibrator_obj:
+            keep.add("calibrator.pkl")
+        # remove everything else in cache
+        removed = []
+        for p in CACHE_DIR.iterdir():
+            if p.name in keep:
+                continue
+            try:
+                p.unlink()
+                removed.append(p.name)
+            except Exception:
+                pass
+        if removed:
+            print("Removed cache files:", removed)
+
+    print("DONE. Index + data saved to cache/")
 
 if __name__ == "__main__":
     main()
