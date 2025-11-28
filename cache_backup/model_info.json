@@ -1,0 +1,5 @@
+{
+  "model_name": "intfloat/e5-base-v2",
+  "num_categories": 33303,
+  "embedding_dim": 768
+}

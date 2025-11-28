@@ -1,7 +1,9 @@
+
+
 # sentence-transformers==3.3.1
 # torch==2.5.1
 # transformers==4.46.3
-# faiss-gpu==1.9.0.post1
+# faiss-cpu==1.9.0
 # pandas==2.2.3
 # numpy==2.0.2
 # fastapi==0.115.6
@@ -10,10 +12,11 @@
 # pydantic==2.10.3
 # joblib==1.4.2
 # psutil==6.1.0
-
+# nltk>=3.8.1
+# # Note: faiss-gpu is commented out to avoid compatibility issues on systems without a compatible GPU.
 
 sentence-transformers==3.3.1
-torch==2.5.1
+torch==2.4.1
 transformers==4.46.3
 faiss-cpu==1.9.0
 pandas==2.2.3
@@ -25,4 +28,3 @@ pydantic==2.10.3
 joblib==1.4.2
 psutil==6.1.0
 nltk>=3.8.1
-# Note: faiss-gpu is commented out to avoid compatibility issues on systems without a compatible GPU.
