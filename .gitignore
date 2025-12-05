@@ -14,3 +14,12 @@ cache/*.npy
 !cache/metadata.pkl
 !cache/model_info.json
 !cache/cross_store_synonyms.pkl
+.cache/
+cache/
+cache_backup/
+*.bin
+*.pt
+*.pkl
+*.pickle
+*.npy
+*.npz

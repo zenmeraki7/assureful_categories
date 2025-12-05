@@ -1,8 +1,0 @@
-{
-  "model_name": "intfloat/e5-base-v2",
-  "num_categories": 33303,
-  "embedding_dim": 768,
-  "index_type": "IndexFlatIP",
-  "distance_metric": "cosine (via inner product on normalized vectors)",
-  "e5_format": "passage: <category_path>. Category: <final>"
-}
